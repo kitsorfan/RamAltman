@@ -108,6 +108,12 @@ export class Sfx {
     this.tone(200, 0.3, { type: 'sawtooth', slide: 600, vol: 0.08 });
   }
 
+  /** Someone's idle RAM uploads to the cloud. */
+  pool(): void {
+    this.tone(330, 0.35, { type: 'sine', slide: 1500, vol: 0.12 });
+    this.tone(1760, 0.12, { type: 'triangle', vol: 0.08, delay: 0.3 });
+  }
+
   /** Jensen takes the stage. */
   keynote(): void {
     [392, 494, 587, 784].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', vol: 0.12, delay: i * 0.08 }));

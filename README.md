@@ -25,6 +25,7 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 - **Heat** rises constantly. Stand in **water** to cool down. Each oasis shrinks as you use it, dries up, and reappears somewhere else. At 100 heat you lose one of your 3 lives.
 - **Energy** drains constantly and shrinks how far you can see. Refill it from the glowing yellow **energy cells**, which rivals also grab for a speed boost.
 - **Shoving** a rival stuns them and knocks 2 of their RAM loose. It costs you: 8 energy and some heat per shove, a 1-second cooldown, a bubble jump from **bad press**, and a **furious** rival who hunts you down to steal RAM back. Hit one Chinese Labs bot and the whole swarm comes for you.
+- **People with idle RAM** sit out in the desert next to glowing PCs. Their idle RAM is "quite terrible", so stand next to one for about 1.5 seconds and Sam pools it to the cloud (2–3 RAM each). It costs you: you have to stay put while it uploads (step away and it stalls), and every take is a headline that inflates the bubble. Someone new shows up a while later.
 - **Jensen** drops by about every 30 seconds. He isn't competing for RAM: he sells to everyone.
   - At a **keynote** ("The more you buy, the more you save!") he throws free GPUs around. Rivals race you for them. A green arrow points the way if he's out in the dark.
   - Or he pops up with a **loan**: "I will lend you the money to buy my chips!" Take it and he throws 3 GPUs at you, but it's a circular deal: the AI bubble jumps 8%, and the GPUs add heat. Say no, or let the 7-second offer expire, and a rival takes it instead.
@@ -65,7 +66,7 @@ In dev mode only, the game is exposed as `window.game` for console tinkering (fo
 
 ### Testing
 
-- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, HUD effects, and high-score storage validation.
+- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, pooling people's idle RAM, HUD effects, and high-score storage validation.
 - **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab.
 
 The end-to-end tests use Playwright's Chromium. Install it once with `npx playwright install chromium`, or use a browser you already have, e.g. `PW_CHANNEL=msedge npm run test:e2e`.
@@ -81,7 +82,7 @@ src/
   math.ts            small vector/random helpers
   storage.ts         validated high-score persistence
   audio/             WebAudio engine, sound effects, procedural soundtrack
-  entities/          player (Sam), rivals, Jensen, pickups, water
+  entities/          player (Sam), rivals, Jensen, people with idle RAM, pickups, water
   fx/                world effects (particles, beams, footprints) and screen effects (flashes, HUD flyers)
   render/            title screen, HUD, overlays, Jensen's loan pop-up, background, drawing helpers
 e2e/                 Playwright end-to-end tests

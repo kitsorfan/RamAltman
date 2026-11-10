@@ -1,6 +1,8 @@
 import type { AudioEngine } from './audio/engine';
 import type { Sfx } from './audio/sfx';
 import {
+  CIVILIANS_ON_FIELD,
+  CIVILIAN_RESPAWN,
   COMBO_MAX,
   COMBO_WINDOW,
   CREDIT_URL,
@@ -24,6 +26,7 @@ import {
   LOW_POWER_MULT,
   MAGNET_RADIUS,
   PING_COST,
+  POOL_BAD_PRESS,
   POWER_DRAIN,
   POWER_SPRINT,
   RAM_POINTS,
@@ -50,6 +53,7 @@ import {
   waterCount,
 } from './config';
 import { Effects } from './fx/effects';
+import { Civilian } from './entities/civilian';
 import { JENSEN_COLOR, Jensen, type JensenVisit, type JensenWorld } from './entities/jensen';
 import { Pickup, type PickupKind } from './entities/pickup';
 import { Player } from './entities/player';
@@ -100,6 +104,12 @@ const START_LINES = ["Let's raise another round!", 'AGI is near. RAM is nearer.'
 const GPU_LINES = ['We need $7 trillion more.', 'Feel the AGI!', 'More compute!', 'Scaling laws, baby.'] as const;
 const WATER_LINES = ['Ahh, liquid cooling.', 'Hydrating the cluster.', 'Water-cooled AGI.'] as const;
 const ENERGY_LINES = ['Fusion would be nice.', 'Charging up!', 'More power!'] as const;
+const POOL_LINES = [
+  'Idle RAM is quite terrible.',
+  "I'm pooling it to the cloud.",
+  "You'll get it back as a subscription.",
+  'Thank you for your service to AGI.',
+] as const;
 const LOAN_TITLES = ['VENDOR FINANCING', 'CIRCULAR DEAL', 'LIMITED-TIME OFFER'] as const;
 const LOAN_YES_LINES = ['Put it on my tab!', 'Circular? Never heard of it.', 'What could go wrong?'] as const;
 
@@ -151,6 +161,9 @@ export class Game implements RivalWorld, JensenWorld {
   private footSide = 1;
   private ghostTimer = 0;
   private readonly hitThisShove = new Set<Rival>();
+  /** People out in the desert with idle RAM in their PCs. */
+  private civilians: Civilian[] = [];
+  private civilianQueue: number[] = [];
   private jensen: Jensen | null = null;
   private jensenTimer = 0;
   private nextVisit: JensenVisit = 'giveaway';
@@ -331,6 +344,8 @@ export class Game implements RivalWorld, JensenWorld {
     this.pingTimer = 0;
     this.pingTarget = null;
     this.clearInfo = null;
+    this.civilians = [];
+    this.civilianQueue = [];
     this.jensen = null;
     this.offer = null;
     this.loans = 0;
@@ -349,6 +364,7 @@ export class Game implements RivalWorld, JensenWorld {
     for (let i = 0; i < ramOnField(this.level); i++) this.spawnPickup('ram');
     for (let i = 0; i < 2; i++) this.spawnPickup('gpu');
     for (let i = 0; i < ENERGY_ON_FIELD; i++) this.spawnPickup('energy');
+    for (let i = 0; i < CIVILIANS_ON_FIELD; i++) this.spawnCivilian();
     this.rivals = spawnRivals(this.teams);
     this.ramSpawnTimer = RAM_SPAWN_INTERVAL;
     this.gpuSpawnTimer = rand(5, 8);
@@ -487,6 +503,7 @@ export class Game implements RivalWorld, JensenWorld {
       }
       if (dist(pk.pos, p.pos) < p.radius + pk.radius) this.collect(pk);
     }
+    this.updateCivilians(dt);
 
     // Rivals
     for (const r of this.rivals) r.update(dt, this);
@@ -826,6 +843,49 @@ export class Game implements RivalWorld, JensenWorld {
   }
 
   // -------------------------------------------------------------------------
+  // People with idle RAM: Sam pools it to the cloud
+  // -------------------------------------------------------------------------
+
+  private updateCivilians(dt: number): void {
+    const p = this.player;
+    for (const c of this.civilians) {
+      if (c.update(dt, p.pos)) this.poolRam(c);
+      else if (c.pooling && Math.random() < dt * 18) this.fx.fling(c.pcPos, p.pos, '#2fbf6a', 1);
+    }
+    const gone = this.civilians.filter((c) => c.gone);
+    if (gone.length) {
+      this.civilians = this.civilians.filter((c) => !c.gone);
+      this.civilianQueue.push(...gone.map(() => CIVILIAN_RESPAWN));
+    }
+    this.civilianQueue = this.civilianQueue.map((t) => t - dt);
+    while (this.civilianQueue.length && (this.civilianQueue[0] ?? 1) <= 0) {
+      this.civilianQueue.shift();
+      this.spawnCivilian();
+    }
+  }
+
+  /** Their RAM is now Sam's. The price: a headline that inflates the bubble. */
+  private poolRam(c: Civilian): void {
+    const p = this.player;
+    const pc = c.pcPos;
+    for (let i = 0; i < c.profile.ram; i++) this.collect(new Pickup('ram', { x: pc.x + rand(-6, 6), y: pc.y + rand(-6, 6) }));
+    this.bubble += POOL_BAD_PRESS;
+    this.bubbleNote = 'BAD PRESS!';
+    this.screenFx.bubblePulse = 1;
+    this.fx.text(p.pos.x, p.pos.y - 50, `HEADLINE: SAM TAKES ${c.profile.name.toUpperCase()}'S RAM`, '#ff8ad8', 9);
+    this.fx.fling(pc, p.pos, '#2fbf6a', 12);
+    this.fx.ring(pc.x, pc.y, '#5dff9a', 60, 0.5, 3);
+    this.sfx.pool();
+    p.say(pick(POOL_LINES), 2.2);
+  }
+
+  private spawnCivilian(): void {
+    let pos = this.randomFreePos(160, 380);
+    for (let i = 0; i < 20 && this.civilians.some((c) => dist(c.pos, pos) < 500); i++) pos = this.randomFreePos(160, 380);
+    this.civilians.push(new Civilian(pos));
+  }
+
+  // -------------------------------------------------------------------------
   // Jensen: free GPUs, and loans to buy his chips
   // -------------------------------------------------------------------------
 
@@ -991,6 +1051,7 @@ export class Game implements RivalWorld, JensenWorld {
       const d = dist(c, this.player.pos);
       if (d < minDist || d > maxDist) continue;
       if (this.water.some((w) => dist(w.pos, c) < 450)) continue;
+      if (this.civilians.some((cv) => dist(cv.pos, c) < 150)) continue;
       pos = c;
     }
     pos ??= { x: rand(margin, WORLD_W - margin), y: rand(margin, WORLD_H - margin) };
@@ -1099,6 +1160,7 @@ export class Game implements RivalWorld, JensenWorld {
     for (const pk of this.pickups) if (inView(pk.pos, 40)) pk.draw(ctx, t);
     const actors: Drawable[] = [...this.rivals.filter((r) => inView(r.pos, 60)), p];
     if (this.jensen && inView(this.jensen.pos, 80)) actors.push(this.jensen);
+    actors.push(...this.civilians.filter((c) => inView(c.pos, 70)));
     actors.sort((a, b) => a.pos.y - b.pos.y);
     for (const a of actors) a.draw(ctx, t);
     this.fx.drawParticles(ctx);
@@ -1117,7 +1179,11 @@ export class Game implements RivalWorld, JensenWorld {
     for (const pk of this.pickups) {
       if (pk.kind === 'energy' && inView(pk.pos, 20) && dist(pk.pos, p.pos) > vr * 0.7) pk.drawBeacon(ctx, t);
     }
+    for (const c of this.civilians) {
+      if (inView(c.pos, 30) && dist(c.pos, p.pos) > vr * 0.7) c.drawBeacon(ctx, t);
+    }
     if (this.jensen && inView(this.jensen.pos, 300)) this.jensen.drawSpotlight(ctx, t);
+    for (const c of this.civilians) if (inView(c.pos, 120)) c.drawSpeech(ctx);
     for (const r of this.rivals) if (inView(r.pos, 120)) r.drawSpeech(ctx);
     this.jensen?.drawSpeech(ctx);
     p.drawSpeech(ctx);
@@ -1243,6 +1309,8 @@ export class Game implements RivalWorld, JensenWorld {
       hint = 'Overheating! Press E to sonar-ping for water.';
     } else if (this.level === 1 && this.levelTime > 3 && this.levelTime < 10) {
       hint = 'Tip: SPACE shoves rivals. It costs energy, feeds the bubble, and they hit back!';
+    } else if (this.level === 1 && this.levelTime > 11 && this.levelTime < 18) {
+      hint = 'Tip: stand next to people with glowing PCs to take their idle RAM. Bad press, though!';
     }
     if (!hint) return;
     const ctx = this.ctx;

@@ -34,6 +34,8 @@ const HEADLINES = [
   'Elon promises Colossus 3 "by next Tuesday"',
   'Gemini finds 1,000,000 results for "RAM near me"',
   'Chinese lab matches frontier performance with a single stick of RAM',
+  'Sam: the RAM sitting idle in your PC is "quite terrible"',
+  'Grandma reports her 8 GB "pooled to the cloud" by a man in a grey sweater',
   'Jensen offers to lend everyone the money to buy his chips',
   'Leather jacket futures soar after surprise keynote',
   'Desert data center runs out of water, again',
@@ -544,7 +546,7 @@ export class TitleScreen {
     ctx.font = uiFont(14, 700);
     outlinedText(
       ctx,
-      'Grab RAM before the bubble pops  ·  Cool off in WATER  ·  Refill ENERGY cells  ·  Shoving works, but it costs you',
+      'Grab RAM  ·  Take idle RAM from people  ·  Cool off in WATER  ·  Refill ENERGY  ·  Shoving costs you',
       VIEW_W / 2,
       368,
       '#ffe9f5',

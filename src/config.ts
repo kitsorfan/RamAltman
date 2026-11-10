@@ -55,6 +55,14 @@ export const WATER_RESPAWN_DELAY = 4;
 export const RIVAL_SPEED_SCALE = 1.0;
 export const RIVAL_BOOST_TIME = 4; // speed boost after a rival grabs an energy cell
 
+// People out in the desert with idle RAM in their PCs. Stand next to one and Sam pools it to the cloud.
+// The price: you have to stay put while it uploads, and every take is bad press for the bubble.
+export const CIVILIANS_ON_FIELD = 3;
+export const CIVILIAN_RESPAWN = 18; // seconds before someone new shows up
+export const POOL_RANGE = 48;
+export const POOL_TIME = 1.4;
+export const POOL_BAD_PRESS = 0.03;
+
 // Jensen drops by now and then: a keynote that throws free GPUs around (rivals race you for them),
 // or a loan to buy his chips. The loan is a circular deal, so it inflates the AI bubble.
 export const JENSEN_FIRST_VISIT: readonly [number, number] = [12, 18]; // seconds into a level
