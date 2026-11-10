@@ -1,0 +1,113 @@
+# Ram Altman
+
+A parody top-down arcade game in TypeScript. You play Sam, racing to hoard RAM before the AI bubble bursts, while Dario, Elon, Gemini and the Chinese Labs compete for the same supply. The desert is dark, you run hot, and water and energy are hard to find.
+
+Created by [www.kitsorfan.com](https://www.kitsorfan.com).
+
+> **Disclaimer:** Ram Altman is a work of parody. It is not affiliated with, endorsed by, or sponsored by any company or person it depicts.
+
+## How to play
+
+| Key | Action |
+| --- | --- |
+| WASD / Arrows | Move |
+| Shift | Sprint (burns energy, builds heat) |
+| Space (or J) | Shove the rival in front of you |
+| E (or Q) | Sonar ping: reveals the nearest water and points an arrow at it |
+| Y (or Enter) | Take Jensen's loan when he offers one (or click the button) |
+| X | Turn the loan down |
+| P / Esc | Pause |
+| M | Mute all sound |
+| N | Toggle music |
+
+- **RAM sticks** count toward each series' target. Hit it before the **AI bubble** pops. Chain pickups for a combo multiplier (up to x8).
+- **GPUs** are worth 1,000 points each, but they add heat.
+- **Heat** rises constantly. Stand in **water** to cool down. Each oasis shrinks as you use it, dries up, and reappears somewhere else. At 100 heat you lose one of your 3 lives.
+- **Energy** drains constantly and shrinks how far you can see. Refill it from the glowing yellow **energy cells**, which rivals also grab for a speed boost.
+- **Shoving** a rival stuns them and knocks 2 of their RAM loose. It costs you: 8 energy and some heat per shove, a 1-second cooldown, a bubble jump from **bad press**, and a **furious** rival who hunts you down to steal RAM back. Hit one Chinese Labs bot and the whole swarm comes for you.
+- **Jensen** drops by about every 30 seconds. He isn't competing for RAM: he sells to everyone.
+  - At a **keynote** ("The more you buy, the more you save!") he throws free GPUs around. Rivals race you for them. A green arrow points the way if he's out in the dark.
+  - Or he pops up with a **loan**: "I will lend you the money to buy my chips!" Take it and he throws 3 GPUs at you, but it's a circular deal: the AI bubble jumps 8%, and the GPUs add heat. Say no, or let the 7-second offer expire, and a rival takes it instead.
+- Finish a series as #1 in market share for a +2,500 bonus.
+
+### Rivals
+
+| Rival | Strategy |
+| --- | --- |
+| Dario | Picks RAM far from you, steers around you, and stops now and then for safety evals. Never steals. |
+| Elon | Goes for GPUs. When you carry RAM and he is close, he winds up (red `!`) and dashes. A hit steals 2 RAM. |
+| Gemini | Slow, but pulls nearby pickups toward him and teleports to the densest cluster every ~10s. |
+| Chinese Labs | Three fast, small bots. They predict where you are heading and grab it first. Touching one drains 15 energy. |
+
+## Development
+
+Requires Node.js 22.12 or newer (`.nvmrc` pins 24 for CI).
+
+```sh
+npm install
+npm run dev          # open the printed localhost URL
+```
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Type-check, then production build to `dist/` |
+| `npm run preview` | Serve the production build locally |
+| `npm run typecheck` | Type-check the game and the tooling/tests |
+| `npm run lint` | Lint with [oxlint](https://oxc.rs) (warnings fail) |
+| `npm run lint:fix` | Apply oxlint's automatic fixes |
+| `npm test` | Unit tests with [Vitest](https://vitest.dev) |
+| `npm run test:watch` | Unit tests in watch mode |
+| `npm run test:e2e` | End-to-end tests with [Playwright](https://playwright.dev) against the production build |
+| `npm run check` | Lint, unit tests, type-check and build in one go |
+
+In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away). It is stripped from production builds.
+
+### Testing
+
+- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, HUD effects, and high-score storage validation.
+- **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab.
+
+The end-to-end tests use Playwright's Chromium. Install it once with `npx playwright install chromium`, or use a browser you already have, e.g. `PW_CHANNEL=msedge npm run test:e2e`.
+
+### Project structure
+
+```text
+src/
+  main.ts            entry point: wires audio, input and the game together
+  game.ts            game loop, state machine, spawning, scoring, shoving, fog of war
+  config.ts          every tuning number (speeds, heat/energy rates, level scaling)
+  input.ts           keyboard state
+  math.ts            small vector/random helpers
+  storage.ts         validated high-score persistence
+  audio/             WebAudio engine, sound effects, procedural soundtrack
+  entities/          player (Sam), rivals, Jensen, pickups, water
+  fx/                world effects (particles, beams, footprints) and screen effects (flashes, HUD flyers)
+  render/            title screen, HUD, overlays, Jensen's loan pop-up, background, drawing helpers
+e2e/                 Playwright end-to-end tests
+.github/             CI/CD workflow and Dependabot config
+```
+
+## Security and privacy
+
+- **No third parties:** everything, including the pixel font (self-hosted via Fontsource), is served from the game's own origin. No analytics, trackers, cookies or CDNs. An end-to-end test enforces this.
+- **Strict Content-Security-Policy** in the production build: `default-src 'self'`, no inline scripts, no `eval`, no plugins, no forms.
+- **Stored data:** only the high score, in the player's own browser (`localStorage`). It is validated on read, so a tampered value can't break the game.
+- **External link:** the credit badge opens in a new tab with `noopener,noreferrer`.
+- **Supply chain:** `npm ci` from a committed lockfile, Dependabot update PRs for npm and GitHub Actions, and least-privilege CI permissions (the deploy job alone can write to Pages).
+
+## Deploy to GitHub Pages
+
+The build uses relative asset paths (`base: './'`), so it works from `https://<user>.github.io/<repo>/`. The workflow in `.github/workflows/ci.yml` runs lint, tests and the build on every push and pull request, and deploys `main` when everything passes.
+
+1. Create a GitHub repository (for example `RamAltman`) and push this project to its `main` branch.
+2. In the repository, go to **Settings > Pages > Build and deployment** and set **Source** to **GitHub Actions**.
+3. Push to `main`. The game goes live at `https://<user>.github.io/RamAltman/`.
+
+To use your own domain instead (for example a subdomain of kitsorfan.com), add it under **Settings > Pages > Custom domain** and point a DNS CNAME record at `<user>.github.io`.
+
+## License
+
+[MIT](LICENSE) © 2026 [www.kitsorfan.com](https://www.kitsorfan.com).
+
+Third-party assets: the [Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P) font by CodeMan38 is bundled via [Fontsource](https://fontsource.org) under the [SIL Open Font License 1.1](https://openfontlicense.org).

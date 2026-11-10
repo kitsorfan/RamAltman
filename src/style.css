@@ -1,0 +1,26 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0b0816;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+#game {
+  display: block;
+  width: min(100vw, 150vh);
+  height: auto;
+  aspect-ratio: 3 / 2;
+  border-radius: 6px;
+  box-shadow: 0 0 60px rgba(160, 90, 255, 0.25);
+}
+
+noscript {
+  color: #ffffff;
+  font: 600 18px system-ui, sans-serif;
+}
