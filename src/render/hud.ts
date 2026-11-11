@@ -28,6 +28,17 @@ export interface HudData {
   bubblePulse: number;
   /** Why the bubble just jumped (shown while bubblePulse glows). */
   bubbleNote: string;
+  news: NewsView;
+  /** Hype tweet recharge, 0 (just posted) to 1 (ready). */
+  tweetReady: number;
+}
+
+/** The ticker under the bubble meter: a headline, or a breaking story in progress. */
+export interface NewsView {
+  headline: string | null;
+  /** Seconds the headline has been showing. */
+  headlineAge: number;
+  story: { title: string; rule: string; timeLeft: number; duration: number } | null;
 }
 
 // Status panel layout, exported so pickups can fly to the right HUD element.
@@ -108,7 +119,9 @@ function meter(
 
 export function drawHud(ctx: CanvasRenderingContext2D, d: HudData): void {
   drawStatusPanel(ctx, d);
+  drawTweetChip(ctx, d);
   drawBubbleMeter(ctx, d);
+  drawNews(ctx, d);
   drawLeaderboard(ctx, d);
   drawCombo(ctx, d);
 
@@ -117,7 +130,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, d: HudData): void {
   ctx.textBaseline = 'alphabetic';
   outlinedText(
     ctx,
-    `WASD move · SHIFT sprint · SPACE shove · E sonar · P pause · M ${d.muted ? 'unmute' : 'mute'} · N music ${d.musicOn ? 'off' : 'on'}`,
+    `WASD move · SHIFT sprint · SPACE shove · E sonar · T tweet · P pause · M ${d.muted ? 'unmute' : 'mute'} · N music ${d.musicOn ? 'off' : 'on'}`,
     VIEW_W - 14,
     VIEW_H - 14,
     'rgba(255, 255, 255, 0.8)',
@@ -175,6 +188,127 @@ function barGlow(
   ctx.beginPath();
   ctx.roundRect(bar.x - e, bar.y - e, bar.w + e * 2, bar.h + e * 2, 6);
   ctx.stroke();
+}
+
+/** Under the status panel: is the hype tweet ready yet? */
+function drawTweetChip(ctx: CanvasRenderingContext2D, d: HudData): void {
+  const x = PANEL_X;
+  const y = PANEL_Y + 134;
+  const w = 150;
+  const h = 22;
+  const f = clamp(d.tweetReady, 0, 1);
+  const ready = f >= 1;
+  panel(ctx, x, y, w, h);
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 10);
+  ctx.clip();
+  ctx.fillStyle = ready ? `rgba(79, 184, 255, ${0.3 + 0.12 * Math.sin(d.time * 5)})` : 'rgba(79, 184, 255, 0.16)';
+  ctx.fillRect(x, y, w * f, h);
+  ctx.restore();
+
+  ctx.fillStyle = ready ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+  ctx.beginPath();
+  ctx.roundRect(x + 6, y + 4, 14, 14, 3);
+  ctx.fill();
+  ctx.font = pixelFont(7);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2a0f3d';
+  ctx.fillText('T', x + 13, y + 12);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = ready ? '#bfeaff' : '#8d86ad';
+  ctx.fillText(ready ? 'HYPE TWEET' : 'DRAFTING…', x + 28, y + 12);
+}
+
+const TICKER_W = 400;
+const TICKER_X = VIEW_W / 2 - TICKER_W / 2;
+const TICKER_Y = 68;
+
+function drawNews(ctx: CanvasRenderingContext2D, d: HudData): void {
+  const n = d.news;
+  if (n.story) {
+    drawStory(ctx, n.story, d.time);
+    return;
+  }
+  if (!n.headline) return;
+  const h = 20;
+  const x = TICKER_X;
+  const y = TICKER_Y;
+  ctx.fillStyle = 'rgba(14, 10, 30, 0.78)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, TICKER_W, h, 6);
+  ctx.fill();
+  ctx.fillStyle = '#d6264a';
+  ctx.beginPath();
+  ctx.roundRect(x, y, 46, h, [6, 0, 0, 6]);
+  ctx.fill();
+  ctx.font = pixelFont(7);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('NEWS', x + 23, y + h / 2 + 1);
+
+  // Each new headline flips up into place; one that doesn't fit scrolls slowly to its end.
+  const left = x + 54;
+  const avail = TICKER_W - 60;
+  ctx.font = uiFont(12, 700);
+  const tw = ctx.measureText(n.headline).width;
+  const k = clamp(n.headlineAge / 0.25, 0, 1);
+  const scroll = tw > avail ? clamp((n.headlineAge - 1.2) * 45, 0, tw - avail) : 0;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left - 2, y, avail + 4, h);
+  ctx.clip();
+  ctx.globalAlpha = k;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText(n.headline, left - scroll, y + h / 2 + 1 + (1 - k) * 12);
+  ctx.restore();
+}
+
+/** A breaking story: what happened, what it means, and how long it lasts. */
+function drawStory(ctx: CanvasRenderingContext2D, s: NonNullable<NewsView['story']>, time: number): void {
+  const x = TICKER_X;
+  const y = TICKER_Y;
+  const h = 44;
+  ctx.fillStyle = 'rgba(58, 6, 22, 0.92)';
+  ctx.strokeStyle = '#ff3b5c';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, TICKER_W, h, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = blink(time, 3) ? '#ff3b5c' : '#c41e3f';
+  ctx.beginPath();
+  ctx.roundRect(x, y, 82, 20, [6, 0, 6, 0]);
+  ctx.fill();
+  ctx.font = pixelFont(7);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('BREAKING', x + 41, y + 11);
+
+  ctx.textAlign = 'left';
+  ctx.font = pixelFont(9);
+  outlinedText(ctx, s.title, x + 92, y + 11, '#ffe066', 'rgba(10, 6, 20, 0.9)', 3);
+  ctx.textAlign = 'right';
+  ctx.font = pixelFont(8);
+  ctx.fillStyle = '#ffd6de';
+  ctx.fillText(`${Math.max(0, Math.ceil(s.timeLeft))}s`, x + TICKER_W - 8, y + 11);
+
+  ctx.textAlign = 'center';
+  ctx.font = uiFont(12, 700);
+  if (ctx.measureText(s.rule).width > TICKER_W - 16) ctx.font = uiFont(11, 700);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(s.rule, x + TICKER_W / 2, y + 30);
+
+  const f = clamp(s.timeLeft / s.duration, 0, 1);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.fillRect(x + 8, y + h - 5, TICKER_W - 16, 2);
+  ctx.fillStyle = '#ff3b5c';
+  ctx.fillRect(x + 8, y + h - 5, (TICKER_W - 16) * f, 2);
 }
 
 function drawBubbleMeter(ctx: CanvasRenderingContext2D, d: HudData): void {

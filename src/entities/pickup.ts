@@ -5,6 +5,7 @@ import { TAU, dot, groundShadow } from '../render/draw';
 export type PickupKind = 'ram' | 'gpu' | 'energy';
 
 const RADIUS: Record<PickupKind, number> = { ram: 12, gpu: 16, energy: 13 };
+const FALL_GRAVITY = 1100;
 
 export class Pickup {
   readonly kind: PickupKind;
@@ -13,6 +14,11 @@ export class Pickup {
   /** Set when knocked loose from a rival; slides to a stop. */
   readonly vel: Vec = vec();
   alive = true;
+  /** Height above the sand while falling from the sky (RAM rain). Nobody can grab it until it lands. */
+  z = 0;
+  /** True only on the frame it hits the ground. */
+  landed = false;
+  private vz = 0;
   private age = 0;
   private readonly phase = rand(0, TAU);
 
@@ -22,8 +28,21 @@ export class Pickup {
     this.radius = RADIUS[kind];
   }
 
+  get airborne(): boolean {
+    return this.z > 0;
+  }
+
   update(dt: number): void {
     this.age += dt;
+    this.landed = false;
+    if (this.z > 0) {
+      this.vz += FALL_GRAVITY * dt;
+      this.z = Math.max(0, this.z - this.vz * dt);
+      if (this.z === 0) {
+        this.vz = 0;
+        this.landed = true;
+      }
+    }
     if (this.vel.x !== 0 || this.vel.y !== 0) {
       this.pos.x += this.vel.x * dt;
       this.pos.y += this.vel.y * dt;
@@ -36,11 +55,14 @@ export class Pickup {
 
   draw(ctx: CanvasRenderingContext2D, time: number): void {
     const s = Math.min(1, this.age * 4);
-    const bob = Math.sin(time * 3 + this.phase) * 3;
-    groundShadow(ctx, this.pos.x, this.pos.y + 10, 12 * s, 4 * s);
+    const bob = this.z > 0 ? 0 : Math.sin(time * 3 + this.phase) * 3;
+    // The shadow sharpens as a falling item gets close to the ground.
+    const near = 1 - Math.min(0.7, this.z / 900);
+    groundShadow(ctx, this.pos.x, this.pos.y + 10, 12 * s * near, 4 * s * near);
     ctx.save();
-    ctx.translate(this.pos.x, this.pos.y + bob - 4);
+    ctx.translate(this.pos.x, this.pos.y + bob - 4 - this.z);
     ctx.scale(s, s);
+    if (this.z > 0) ctx.rotate(this.age * 5 + this.phase);
     this.drawIcon(ctx, time);
     ctx.restore();
   }

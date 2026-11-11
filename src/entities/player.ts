@@ -9,7 +9,10 @@ import {
   WORLD_W,
 } from '../config';
 import { clamp, lerp, normalize, vec, type Vec } from '../math';
-import { TAU, dot, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, type ChibiStyle } from '../render/draw';
+import { TAU, dot, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, uiFont, type ChibiStyle } from '../render/draw';
+
+const ZERO: Vec = { x: 0, y: 0 };
+const TWEET_SHOW = 2.6;
 
 const SAM_STYLE: ChibiStyle = {
   body: '#8f96a3',
@@ -38,13 +41,37 @@ export class Player {
   shoveCooldown = 0;
   /** While > 0 the shove can connect with rivals. */
   shoveActive = 0;
+  tweetCooldown = 0;
+  /** Seconds left standing around holding a box after the board fired him. Can't move or act. */
+  fired = 0;
   t = 0;
   private shoveAnim = 0;
   private speech: string | null = null;
   private speechTime = 0;
+  private tweetText: string | null = null;
+  private tweetTime = 0;
 
   get canShove(): boolean {
-    return this.shoveCooldown <= 0;
+    return this.shoveCooldown <= 0 && this.fired <= 0;
+  }
+
+  get canTweet(): boolean {
+    return this.tweetCooldown <= 0 && this.fired <= 0;
+  }
+
+  /** Post something vague. Shows as a little tweet card above Sam. */
+  tweet(text: string, cooldown: number): void {
+    this.tweetText = text;
+    this.tweetTime = TWEET_SHOW;
+    this.tweetCooldown = cooldown;
+    this.speech = null;
+  }
+
+  /** The board fires Sam: he stands there holding his box until he's rehired. */
+  fire(time: number): void {
+    this.fired = time;
+    this.shoveActive = 0;
+    this.sprinting = false;
   }
 
   /** Lunge forward with a punch. */
@@ -71,7 +98,10 @@ export class Player {
     this.shoveCooldown = 0;
     this.shoveActive = 0;
     this.shoveAnim = 0;
+    this.tweetCooldown = 0;
+    this.fired = 0;
     this.speech = null;
+    this.tweetText = null;
   }
 
   say(text: string, duration = 2): void {
@@ -86,10 +116,17 @@ export class Player {
       this.speechTime -= dt;
       if (this.speechTime <= 0) this.speech = null;
     }
+    if (this.tweetTime > 0) {
+      this.tweetTime -= dt;
+      if (this.tweetTime <= 0) this.tweetText = null;
+    }
   }
 
-  update(dt: number, axis: Vec, speedMult: number): void {
+  update(dt: number, input: Vec, speedMult: number): void {
     this.animate(dt);
+    const axis = this.fired > 0 ? ZERO : input;
+    this.fired = Math.max(0, this.fired - dt);
+    this.tweetCooldown = Math.max(0, this.tweetCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
     this.shoveCooldown = Math.max(0, this.shoveCooldown - dt);
     this.shoveActive = Math.max(0, this.shoveActive - dt);
@@ -114,7 +151,7 @@ export class Player {
   draw(ctx: CanvasRenderingContext2D, time: number): void {
     const { x, y } = this.pos;
     ctx.save();
-    if (this.invuln > 0 && Math.floor(time * 14) % 2 === 0) ctx.globalAlpha = 0.35;
+    if (this.invuln > 0 && this.fired <= 0 && Math.floor(time * 14) % 2 === 0) ctx.globalAlpha = 0.35;
 
     if (this.heat > 40) {
       const a = ((this.heat - 40) / 60) * (0.35 + 0.15 * Math.sin(time * 10));
@@ -164,6 +201,8 @@ export class Player {
       ctx.stroke();
     }
 
+    if (this.fired > 0) drawBox(ctx, x, y + bob, time);
+
     if (this.inWater) {
       ctx.fillStyle = 'rgba(60, 150, 230, 0.55)';
       ctx.beginPath();
@@ -179,6 +218,82 @@ export class Player {
   }
 
   drawSpeech(ctx: CanvasRenderingContext2D): void {
-    if (this.speech) speechBubble(ctx, this.pos.x, this.pos.y - this.radius - 22, this.speech, '#9be7ff');
+    if (this.tweetText) drawTweet(ctx, this.pos.x, this.pos.y - this.radius - 22, this.tweetText, this.tweetTime);
+    else if (this.speech) speechBubble(ctx, this.pos.x, this.pos.y - this.radius - 22, this.speech, '#9be7ff');
   }
+}
+
+/** The classic "you're fired" cardboard box, with a desk plant poking out. */
+function drawBox(ctx: CanvasRenderingContext2D, x: number, y: number, time: number): void {
+  const bx = x - 13;
+  const by = y + 4;
+  ctx.strokeStyle = '#3e7d32';
+  ctx.lineWidth = 2;
+  for (const [dx, lean] of [[5, -0.3], [8, 0.2], [11, 0.7]] as const) {
+    const sway = Math.sin(time * 3 + dx) * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x + dx, by + 2);
+    ctx.quadraticCurveTo(x + dx + lean * 3, by - 5, x + dx + lean * 6 + sway, by - 9);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#c99a5b';
+  ctx.strokeStyle = '#7a5530';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, 26, 15, 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bx + 3, by + 4);
+  ctx.lineTo(bx + 23, by + 4);
+  ctx.stroke();
+  ctx.fillStyle = '#f2cfae';
+  dot(ctx, bx + 1, by + 8, 3.5);
+  dot(ctx, bx + 25, by + 8, 3.5);
+}
+
+/** A little post card: avatar, handle, and something vague in lowercase. */
+function drawTweet(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, timeLeft: number): void {
+  ctx.save();
+  const pop = 1 + 0.25 * Math.max(0, (timeLeft - TWEET_SHOW + 0.15) / 0.15);
+  ctx.font = uiFont(13, 600);
+  const w = Math.max(150, ctx.measureText(text).width + 24);
+  const h = 44;
+  ctx.translate(x, y);
+  ctx.scale(pop, pop);
+  const bx = -w / 2;
+  const by = -h - 8;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#4fb8ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, w, h, 9);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-6, by + h - 1.5);
+  ctx.lineTo(0, by + h + 7);
+  ctx.lineTo(6, by + h - 1.5);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#8f96a3';
+  dot(ctx, bx + 16, by + 13, 7);
+  ctx.fillStyle = '#7a5a3c';
+  ctx.beginPath();
+  ctx.arc(bx + 16, by + 12, 7, Math.PI, TAU);
+  ctx.fill();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = uiFont(11, 800);
+  ctx.fillStyle = '#1b1b24';
+  ctx.fillText('Sam', bx + 28, by + 13);
+  const nameW = ctx.measureText('Sam').width;
+  ctx.font = uiFont(11, 600);
+  ctx.fillStyle = '#7a7290';
+  ctx.fillText('@sam · now', bx + 32 + nameW, by + 13);
+  ctx.font = uiFont(13, 600);
+  ctx.fillStyle = '#1b1b24';
+  ctx.fillText(text, bx + 12, by + 31);
+  ctx.restore();
 }

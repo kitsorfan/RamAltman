@@ -41,6 +41,10 @@ const HEADLINES = [
   'Desert data center runs out of water, again',
   'Local man trades house for 16 GB of DDR5',
   'VCs launch new fund to fund the funds that fund AI',
+  'Sam tweets "something big is coming"; something small arrives',
+  'Board fires Sam, rehires him before lunch',
+  'Dario hosts AI Safety Summit; Elon not invited',
+  'Forecast: scattered RAM showers over the desert',
   'RAM ALTMAN was created by www.kitsorfan.com',
   'Disclaimer: RAM ALTMAN is a parody, not affiliated with any company or person in it',
 ] as const;
@@ -57,6 +61,7 @@ const CONTROLS: ReadonlyArray<{ keys: readonly string[]; label: string }> = [
   { keys: ['SHIFT'], label: 'Sprint' },
   { keys: ['SPACE'], label: 'Shove' },
   { keys: ['E'], label: 'Sonar' },
+  { keys: ['T'], label: 'Tweet' },
   { keys: ['P'], label: 'Pause' },
   { keys: ['M'], label: 'Mute' },
   { keys: ['N'], label: 'Music' },
@@ -546,7 +551,7 @@ export class TitleScreen {
     ctx.font = uiFont(14, 700);
     outlinedText(
       ctx,
-      'Grab RAM  ·  Take idle RAM from people  ·  Cool off in WATER  ·  Refill ENERGY  ·  Shoving costs you',
+      'Grab RAM  ·  Take idle RAM from people  ·  Cool off in WATER  ·  Refill ENERGY  ·  Shoves and tweets cost you',
       VIEW_W / 2,
       368,
       '#ffe9f5',

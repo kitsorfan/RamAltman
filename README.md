@@ -14,6 +14,7 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 | Shift | Sprint (burns energy, builds heat) |
 | Space (or J) | Shove the rival in front of you |
 | E (or Q) | Sonar ping: reveals the nearest water and points an arrow at it |
+| T | Hype tweet: nearby rivals stop to read it |
 | Y (or Enter) | Take Jensen's loan when he offers one (or click the button) |
 | X | Turn the loan down |
 | P / Esc | Pause |
@@ -22,14 +23,27 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 
 - **RAM sticks** count toward each series' target. Hit it before the **AI bubble** pops. Chain pickups for a combo multiplier (up to x8).
 - **GPUs** are worth 1,000 points each, but they add heat.
-- **Heat** rises constantly. Stand in **water** to cool down. Each oasis shrinks as you use it, dries up, and reappears somewhere else. At 100 heat you lose one of your 3 lives.
+- **Heat** rises constantly. Stand in **water** to cool down. Each oasis shrinks as you use it, dries up, and reappears somewhere else. At 100 heat you lose one of your 3 lives, and the board fires you: Sam stands there holding a cardboard box (plant included) for a moment, then gets rehired.
 - **Energy** drains constantly and shrinks how far you can see. Refill it from the glowing yellow **energy cells**, which rivals also grab for a speed boost.
 - **Shoving** a rival stuns them and knocks 2 of their RAM loose. It costs you: 8 energy and some heat per shove, a 1-second cooldown, a bubble jump from **bad press**, and a **furious** rival who hunts you down to steal RAM back. Hit one Chinese Labs bot and the whole swarm comes for you.
+- **Hype tweets** (T): Sam vague-posts something like "something big is coming". Every rival within range stops to read it for about 2.4 seconds, so you can slip past Elon's dash or grab what they were going for. It costs you: hype is what inflates bubbles (+4% bubble per tweet), and you have to wait 14 seconds to post again.
 - **People with idle RAM** sit out in the desert next to glowing PCs. Their idle RAM is "quite terrible", so stand next to one for about 1.5 seconds and Sam pools it to the cloud (2–3 RAM each). It costs you: you have to stay put while it uploads (step away and it stalls), and every take is a headline that inflates the bubble. Someone new shows up a while later.
 - **Jensen** drops by about every 30 seconds. He isn't competing for RAM: he sells to everyone.
   - At a **keynote** ("The more you buy, the more you save!") he throws free GPUs around. Rivals race you for them. A green arrow points the way if he's out in the dark.
   - Or he pops up with a **loan**: "I will lend you the money to buy my chips!" Take it and he throws 3 GPUs at you, but it's a circular deal: the AI bubble jumps 8%, and the GPUs add heat. Say no, or let the 7-second offer expire, and a rival takes it instead.
 - Finish a series as #1 in market share for a +2,500 bonus.
+
+### Breaking news
+
+Every 30 to 40 seconds a story breaks and changes the rules for a few seconds. The ticker under the bubble meter shows what it means and how long it lasts. The rest of the time it reports on what you're doing ("Sam shoves Dario, calls it 'alignment'").
+
+| Story | What happens |
+| --- | --- |
+| Data center fire sale | RAM rains from the sky a short run away. A green arrow points to it. Rivals race you for it. |
+| A DeepSeek moment | Markets panic: Dario, Elon and Gemini freeze, the Chinese Labs speed up, and the bubble shrinks 6%. |
+| Record heatwave | Heat rises 80% faster, but every oasis is refilled and shown on the map. |
+| Elon sues Sam | Elon flies in and hunts you down to serve the papers. Run, tweet, or shove him. |
+| AI Safety Summit | Dario gives a very long talk. Gemini and the labs go sit through it. Elon wasn't invited. |
 
 ### Rivals
 
@@ -62,11 +76,11 @@ npm run dev          # open the printed localhost URL
 | `npm run test:e2e` | End-to-end tests with [Playwright](https://playwright.dev) against the production build |
 | `npm run check` | Lint, unit tests, type-check and build in one go |
 
-In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away). It is stripped from production builds.
+In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away, or `game.breakNews('rain')` to break a story: `rain`, `panic`, `heatwave`, `lawsuit` or `summit`). It is stripped from production builds.
 
 ### Testing
 
-- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, pooling people's idle RAM, HUD effects, and high-score storage validation.
+- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, getting fired, HUD effects, and high-score storage validation.
 - **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab.
 
 The end-to-end tests use Playwright's Chromium. Install it once with `npx playwright install chromium`, or use a browser you already have, e.g. `PW_CHANNEL=msedge npm run test:e2e`.
@@ -81,6 +95,7 @@ src/
   input.ts           keyboard state
   math.ts            small vector/random helpers
   storage.ts         validated high-score persistence
+  news.ts            breaking-news stories, the headline ticker, tweets and headlines
   audio/             WebAudio engine, sound effects, procedural soundtrack
   entities/          player (Sam), rivals, Jensen, people with idle RAM, pickups, water
   fx/                world effects (particles, beams, footprints) and screen effects (flashes, HUD flyers)

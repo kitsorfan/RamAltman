@@ -10,25 +10,30 @@ import {
   ENERGY_ON_FIELD,
   ENERGY_POWER,
   ENERGY_SPAWN_INTERVAL,
+  FIRED_TIME,
   GPU_ON_FIELD,
   GPU_POINTS,
   HEAT_BASE,
   HEAT_GPU,
   HEAT_PER_LEVEL,
   HEAT_SPRINT,
+  HEATWAVE_MULT,
   JENSEN_FIRST_VISIT,
   JENSEN_GIVEAWAY_GPUS,
   JENSEN_INTERVAL,
+  LAWSUIT_FURY,
   LEADER_BONUS,
   LOAN_BUBBLE,
   LOAN_GPUS,
   LOAN_OFFER_TIME,
   LOW_POWER_MULT,
   MAGNET_RADIUS,
+  PANIC_BUBBLE,
   PING_COST,
   POOL_BAD_PRESS,
   POWER_DRAIN,
   POWER_SPRINT,
+  RAIN_RAM,
   RAM_POINTS,
   RAM_SPAWN_INTERVAL,
   SHOVE_ARC,
@@ -40,8 +45,13 @@ import {
   SHOVE_RANGE,
   START_LIVES,
   TIME_BONUS_PER_SEC,
+  TWEET_BUBBLE,
+  TWEET_COOLDOWN,
+  TWEET_RANGE,
+  TWEET_READ_TIME,
   VIEW_H,
   VIEW_W,
+  WATER_CAPACITY,
   WATER_DRAIN,
   WATER_RESPAWN_DELAY,
   WORLD_H,
@@ -77,6 +87,18 @@ import { drawLoanOffer, offerButtonAt } from './render/offer';
 import { TitleScreen } from './render/title';
 import { loadHighScore, saveHighScore } from './storage';
 import { ScreenFx } from './fx/screen-fx';
+import {
+  Headlines,
+  NewsDesk,
+  PANIC_LINES,
+  STORIES,
+  SUMMIT_LECTURE,
+  SUMMIT_LINES,
+  TWEETS,
+  TWEET_REACTIONS,
+  type NewsKind,
+  type NewsStory,
+} from './news';
 
 type State = 'title' | 'playing' | 'paused' | 'levelClear' | 'gameOver';
 
@@ -84,6 +106,7 @@ interface Timed {
   title: string;
   sub: string;
   time: number;
+  color?: string;
 }
 
 interface LoanOffer {
@@ -112,6 +135,26 @@ const POOL_LINES = [
 ] as const;
 const LOAN_TITLES = ['VENDOR FINANCING', 'CIRCULAR DEAL', 'LIMITED-TIME OFFER'] as const;
 const LOAN_YES_LINES = ['Put it on my tab!', 'Circular? Never heard of it.', 'What could go wrong?'] as const;
+const FIRED_LINES = ['Wait, what?', 'Not consistently candid? Me?', 'Can I at least keep the plant?'] as const;
+const REHIRED_LINES = ["I'm back, baby.", 'Miss me?', 'I never really left.'] as const;
+const CLEAR_QUIPS = [
+  'Valuation up. The bubble holds… for now.',
+  "Valuation: $1 trillion. Revenue: let's not talk about it.",
+  `Investors: "We don't get it, but we're in."`,
+  'The board is thrilled. For now.',
+  'AGI is just one more round away. Probably.',
+] as const;
+const POP_LINES = [
+  'Investors want their money back.',
+  'Turns out it WAS a bubble.',
+  'Analysts who said "not a bubble" are unavailable for comment.',
+] as const;
+
+/** A random line for this team from a per-team table, if it has any. */
+function lineFor(lines: Readonly<Record<string, readonly string[]>>, teamId: string): string | undefined {
+  const options = lines[teamId];
+  return options?.length ? pick(options) : undefined;
+}
 
 export class Game implements RivalWorld, JensenWorld {
   readonly player = new Player();
@@ -172,6 +215,13 @@ export class Game implements RivalWorld, JensenWorld {
   private loans = 0;
   /** Where the pointer went down this frame while a loan offer is open. */
   private tap: Vec | null = null;
+  private readonly news = new NewsDesk();
+  /** RAM rain in progress: where it comes down, and what's still up for grabs. */
+  private rain: { pos: Vec; drops: Pickup[] } | null = null;
+  private thudTimer = 0;
+  /** Team leading the RAM race (for the ticker). */
+  private leaderId: string | null = null;
+  private bubbleWarned = false;
   private banner: Timed | null = null;
   private toast: { text: string; time: number } | null = null;
   private clearInfo: LevelClearInfo | null = null;
@@ -324,6 +374,7 @@ export class Game implements RivalWorld, JensenWorld {
 
   private newGame(): void {
     this.teams = createTeams();
+    this.leaderId = null;
     this.score = 0;
     this.level = 1;
     this.player.lives = START_LIVES;
@@ -351,6 +402,10 @@ export class Game implements RivalWorld, JensenWorld {
     this.loans = 0;
     this.jensenTimer = rand(...JENSEN_FIRST_VISIT);
     this.nextVisit = pick(['giveaway', 'loan'] as const);
+    this.news.reset();
+    this.news.report(Headlines.levelStart(seriesName(this.level)));
+    this.rain = null;
+    this.bubbleWarned = false;
     this.fx.clear();
     this.screenFx.clear();
     this.bg.regenerate();
@@ -396,6 +451,7 @@ export class Game implements RivalWorld, JensenWorld {
       leaderBonus,
       rank,
       score: this.score,
+      quip: pick(CLEAR_QUIPS),
     };
     const { x, y } = this.player.pos;
     this.fx.confetti(x, y - 10, 120);
@@ -447,12 +503,17 @@ export class Game implements RivalWorld, JensenWorld {
     // Movement and actions
     const axis = this.input.axis();
     const hasPower = p.power > 0;
-    p.sprinting = this.input.isDown('ShiftLeft', 'ShiftRight') && hasPower && (axis.x !== 0 || axis.y !== 0);
+    const fired = p.fired > 0;
+    p.sprinting = this.input.isDown('ShiftLeft', 'ShiftRight') && hasPower && !fired && (axis.x !== 0 || axis.y !== 0);
     p.update(dt, axis, hasPower ? 1 : LOW_POWER_MULT);
+    if (fired && p.fired <= 0) this.rehire();
     this.trailEffects(dt);
 
-    if (this.input.wasPressed('Space', 'KeyJ')) this.tryShove();
-    if (this.input.wasPressed('KeyE', 'KeyQ')) this.sonarPing();
+    if (!fired) {
+      if (this.input.wasPressed('Space', 'KeyJ')) this.tryShove();
+      if (this.input.wasPressed('KeyE', 'KeyQ')) this.sonarPing();
+      if (this.input.wasPressed('KeyT')) this.tryTweet();
+    }
     if (p.shoveActive > 0) this.checkShoveHits();
 
     // Water cools you down (the pool shrinks while you use it).
@@ -470,7 +531,8 @@ export class Game implements RivalWorld, JensenWorld {
       p.heat = Math.max(0, p.heat - COOL_RATE * dt);
       if (Math.random() < dt * 10) this.fx.burst(p.pos.x, p.pos.y + 8, '#bfefff', 2, 60, 2, 0.4);
     } else {
-      p.heat += (HEAT_BASE + HEAT_PER_LEVEL * (this.level - 1) + (p.sprinting ? HEAT_SPRINT : 0)) * dt;
+      const weather = this.news.isRunning('heatwave') ? HEATWAVE_MULT : 1;
+      p.heat += (HEAT_BASE + HEAT_PER_LEVEL * (this.level - 1) + (p.sprinting ? HEAT_SPRINT : 0)) * weather * dt;
     }
     // Energy always drains; refill it from energy cells.
     p.power = Math.max(0, p.power - (POWER_DRAIN + (p.sprinting ? POWER_SPRINT : 0)) * dt);
@@ -490,10 +552,13 @@ export class Game implements RivalWorld, JensenWorld {
 
     this.updateWater(dt);
 
-    // Pickups: nearby ones get pulled in by Sam's magnet.
+    // Pickups: nearby ones get pulled in by Sam's magnet. Falling ones can't be grabbed until they land.
+    this.thudTimer -= dt;
     for (const pk of this.pickups) {
       pk.update(dt);
       if (!pk.alive) continue;
+      if (pk.landed) this.dropLanded(pk);
+      if (pk.airborne) continue;
       const d = dist(pk.pos, p.pos);
       if (d < MAGNET_RADIUS && d > 1) {
         const n = normalize(sub(p.pos, pk.pos));
@@ -508,10 +573,12 @@ export class Game implements RivalWorld, JensenWorld {
     // Rivals
     for (const r of this.rivals) r.update(dt, this);
     for (const r of this.rivals) {
-      if (r.stunned || r.contactCooldown > 0 || p.invuln > 0) continue;
+      if (r.busy || r.contactCooldown > 0 || p.invuln > 0) continue;
       if (dist(r.pos, p.pos) < r.radius + p.radius) r.handleContact(this);
     }
     this.updateJensen(dt);
+    this.updateNews(dt);
+    this.updateLeader();
 
     this.pickups = this.pickups.filter((pk) => pk.alive);
     this.spawnPickups(dt);
@@ -533,13 +600,17 @@ export class Game implements RivalWorld, JensenWorld {
     }
 
     this.bubble += dt / bubbleDuration(this.level);
+    if (this.bubble > 0.85 && !this.bubbleWarned) {
+      this.bubbleWarned = true;
+      this.news.report(Headlines.bubbleDanger());
+    }
     if (this.bubble >= 1) {
       this.fx.burst(p.pos.x, p.pos.y, '#ff8ad8', 70, 460, 5, 1.2);
       this.fx.ring(p.pos.x, p.pos.y, '#ff8ad8', 600, 1.2, 6);
       this.screenFx.flash('#ff8ad8', 0.85, 0.9);
       this.shake = 18;
       this.sfx.pop();
-      this.gameOver('THE AI BUBBLE BURST!', this.loans > 0 ? 'Jensen wants his money back.' : 'Investors want their money back.');
+      this.gameOver('THE AI BUBBLE BURST!', this.loans > 0 ? 'Jensen wants his money back.' : pick(POP_LINES));
       return;
     }
 
@@ -691,6 +762,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.bubbleNote = 'BAD PRESS!';
     this.screenFx.bubblePulse = 1;
     this.fx.text(this.player.pos.x, this.player.pos.y - 50, 'BAD PRESS! BUBBLE +', '#ff8ad8', 10);
+    this.news.report(Headlines.shove(r.label), 'shove', 10);
     this.shake = Math.max(this.shake, 7);
     this.hitStop = 0.06;
     this.screenFx.flash('#ffffff', 0.12, 0.12);
@@ -763,11 +835,12 @@ export class Game implements RivalWorld, JensenWorld {
     return this.combo;
   }
 
+  /** Overheating costs a life, and the board fires Sam. He's rehired a moment later (if lives are left). */
   private overheat(): void {
     const p = this.player;
     p.lives--;
     p.heat = 35;
-    p.invuln = 2;
+    p.invuln = 2 + FIRED_TIME;
     this.combo = 0;
     this.comboTimer = 0;
     this.shake = 14;
@@ -777,8 +850,206 @@ export class Game implements RivalWorld, JensenWorld {
     this.fx.text(p.pos.x, p.pos.y - 40, 'OVERHEATED!', '#ff6a3c', 14);
     this.screenFx.flash('#ff6a3c', 0.45, 0.5);
     this.sfx.overheat();
-    p.say('Too hot to scale!', 2);
-    if (p.lives <= 0) this.gameOver('MELTDOWN!', 'Your data center overheated.');
+    if (p.lives <= 0) {
+      this.gameOver('MELTDOWN!', 'The board fired you. This time it stuck.');
+      return;
+    }
+    p.fire(FIRED_TIME);
+    this.fx.text(p.pos.x, p.pos.y + 50, 'FIRED BY THE BOARD!', '#ff8a7a', 12);
+    this.sfx.fired();
+    p.say(pick(FIRED_LINES), FIRED_TIME + 0.2);
+    this.news.report(Headlines.fired(), 'fired', 0);
+  }
+
+  private rehire(): void {
+    const p = this.player;
+    this.fx.text(p.pos.x, p.pos.y - 44, 'REHIRED!', '#5dff9a', 14);
+    this.fx.confetti(p.pos.x, p.pos.y - 10, 50);
+    this.fx.ring(p.pos.x, p.pos.y, '#5dff9a', 90, 0.5, 4);
+    this.sfx.rehired();
+    p.say(pick(REHIRED_LINES), 1.8);
+    this.news.report(Headlines.rehired(), 'rehired', 0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Hype tweet
+  // -------------------------------------------------------------------------
+
+  /** Sam vague-posts. Every rival in range stops to read it. Hype is what inflates bubbles. */
+  private tryTweet(): void {
+    const p = this.player;
+    if (!p.canTweet) {
+      this.sfx.denied();
+      return;
+    }
+    const text = pick(TWEETS);
+    p.tweet(text, TWEET_COOLDOWN);
+    this.bubble += TWEET_BUBBLE;
+    this.bubbleNote = 'HYPE!';
+    this.screenFx.bubblePulse = 1;
+    this.fx.text(p.pos.x, p.pos.y + 36, 'HYPE! BUBBLE +', '#ff8ad8', 10);
+    this.fx.ring(p.pos.x, p.pos.y, '#4fb8ff', TWEET_RANGE, 0.8, 3);
+    this.fx.ring(p.pos.x, p.pos.y, '#bfeaff', TWEET_RANGE * 0.55, 0.6, 2);
+    for (const r of this.rivals) {
+      if (r.stunned || dist(r.pos, p.pos) > TWEET_RANGE) continue;
+      r.distract('phone', TWEET_READ_TIME, { line: lineFor(TWEET_REACTIONS, r.team.id) });
+    }
+    this.sfx.tweet();
+    this.news.report(Headlines.tweet(text), 'tweet', 0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Breaking news
+  // -------------------------------------------------------------------------
+
+  /** Starts a story right away. Public so it can be tried from the dev console: `game.breakNews('rain')`. */
+  breakNews(kind: NewsKind): void {
+    if (this.state !== 'playing' || this.news.active) return;
+    this.runStory(this.news.breakStory(kind));
+  }
+
+  private updateNews(dt: number): void {
+    const story = this.news.update(dt, !this.offer && this.levelTime > 3);
+    if (story) this.runStory(story);
+    if (this.rain) {
+      this.rain.drops = this.rain.drops.filter((pk) => pk.alive);
+      if (!this.rain.drops.length || !this.news.isRunning('rain')) this.rain = null;
+    }
+  }
+
+  private runStory(story: NewsStory): void {
+    this.banner = { title: 'BREAKING NEWS', sub: story.headline, time: 2.6, color: '#ff5d73' };
+    this.screenFx.flash('#ff3b5c', 0.16, 0.4);
+    this.shake = Math.max(this.shake, 5);
+    this.sfx.breaking();
+    this.player.say(pick(story.samLines), 2.4);
+    switch (story.kind) {
+      case 'rain':
+        this.ramRain();
+        break;
+      case 'panic':
+        this.marketPanic();
+        break;
+      case 'heatwave':
+        this.heatwave();
+        break;
+      case 'lawsuit':
+        this.lawsuit();
+        break;
+      case 'summit':
+        this.safetySummit();
+        break;
+    }
+  }
+
+  /** A data center fire sale: a pile of RAM falls out of the sky a short run from Sam. Rivals race for it too. */
+  private ramRain(): void {
+    const p = this.player.pos;
+    const m = 160;
+    let pos: Vec = { x: clamp(p.x + 450, m, WORLD_W - m), y: clamp(p.y, m, WORLD_H - m) };
+    for (let i = 0; i < 30; i++) {
+      const a = rand(0, TAU);
+      const d = rand(320, 480);
+      const c = { x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d };
+      if (c.x < m || c.x > WORLD_W - m || c.y < m || c.y > WORLD_H - m) continue;
+      if (this.water.some((w) => dist(c, w.pos) < w.maxRadius + 140)) continue;
+      pos = c;
+      break;
+    }
+    const drops: Pickup[] = [];
+    for (let i = 0; i < RAIN_RAM + this.level; i++) {
+      const a = rand(0, TAU);
+      const r = Math.sqrt(Math.random()) * 110;
+      const pk = new Pickup('ram', { x: pos.x + Math.cos(a) * r, y: pos.y + Math.sin(a) * r });
+      pk.z = rand(320, 950); // different heights, so they land one after another
+      drops.push(pk);
+    }
+    this.pickups.push(...drops);
+    this.rain = { pos, drops };
+    this.fx.ring(pos.x, pos.y, '#5dff9a', 140, 0.9, 4);
+  }
+
+  private dropLanded(pk: Pickup): void {
+    this.fx.burst(pk.pos.x, pk.pos.y + 8, 'rgba(190, 150, 90, 0.8)', 6, 110, 2.5, 0.4);
+    this.fx.ring(pk.pos.x, pk.pos.y + 8, '#5dff9a', 26, 0.3, 2);
+    if (this.thudTimer <= 0 && dist(pk.pos, this.player.pos) < this.visionRadius() + 250) {
+      this.thudTimer = 0.09;
+      this.sfx.thud();
+    }
+  }
+
+  /** A cheap model spooks the markets: rivals freeze, the labs speed up, and the bubble deflates a little. */
+  private marketPanic(): void {
+    this.bubble = Math.max(0, this.bubble - PANIC_BUBBLE);
+    this.bubbleNote = `MARKETS PANIC! -${Math.round(PANIC_BUBBLE * 100)}%`;
+    this.screenFx.bubblePulse = 1;
+    let gloated = false;
+    for (const r of this.rivals) {
+      if (r.team === this.teams.china) {
+        r.boost = Math.max(r.boost, 8);
+        if (!gloated) r.say(lineFor(PANIC_LINES, 'china') ?? 'Efficient!', 2);
+        gloated = true;
+      } else {
+        r.distract('panic', 3.2, { line: lineFor(PANIC_LINES, r.team.id) });
+      }
+    }
+  }
+
+  /** Heat rises faster for a while, but every oasis is topped up and shows on the map. */
+  private heatwave(): void {
+    for (const w of this.water) {
+      w.capacity = WATER_CAPACITY;
+      if (w.discovered) continue;
+      w.discovered = true;
+      this.fx.ring(w.pos.x, w.pos.y, '#7fd6ff', w.maxRadius + 40, 0.8, 3);
+    }
+    this.screenFx.flash('#ff8a3c', 0.15, 0.5);
+  }
+
+  /** Elon serves a lawsuit in person: he flies in if he's far away, then hunts Sam for a while. */
+  private lawsuit(): void {
+    const elon = this.rivals.find((r) => r.team === this.teams.elon);
+    if (!elon) return;
+    const p = this.player.pos;
+    if (dist(elon.pos, p) > 650) {
+      this.fx.beam(elon.pos.x, elon.pos.y, elon.team.color);
+      const a = rand(0, TAU);
+      elon.pos = { x: clamp(p.x + Math.cos(a) * 460, 60, WORLD_W - 60), y: clamp(p.y + Math.sin(a) * 460, 60, WORLD_H - 60) };
+      elon.vel = vec();
+      this.fx.beam(elon.pos.x, elon.pos.y, elon.team.color);
+      this.fx.burst(elon.pos.x, elon.pos.y, elon.team.color, 20, 180, 3, 0.6);
+    }
+    elon.stun = 0;
+    elon.enrage(LAWSUIT_FURY);
+    elon.say('See you in court!', 2.4);
+  }
+
+  /** Dario gives a very long talk. Gemini and the labs go and sit through it. Elon wasn't invited. */
+  private safetySummit(): void {
+    const dario = this.rivals.find((r) => r.team === this.teams.dario);
+    if (!dario) return;
+    const time = STORIES.summit.duration;
+    dario.distract('lecture', time, { line: 'Welcome, everyone!', chatter: SUMMIT_LECTURE });
+    const audience = this.rivals.filter((r) => r.team !== this.teams.dario && r.team !== this.teams.elon);
+    audience.forEach((r, i) => {
+      const a = Math.PI * (0.15 + (0.7 * i) / Math.max(1, audience.length - 1));
+      const seat = { x: dario.pos.x + Math.cos(a) * 80, y: dario.pos.y + Math.sin(a) * 64 };
+      r.distract('summit', time, { goTo: seat, line: lineFor(SUMMIT_LINES, r.team.id), chatter: SUMMIT_LINES[r.team.id] });
+    });
+    this.rivals.find((r) => r.team === this.teams.elon)?.say("Wasn't invited. Fine.", 2.4);
+    this.fx.beam(dario.pos.x, dario.pos.y, dario.team.color);
+  }
+
+  /** The ticker reports every change at the top of the RAM race (ties don't count). */
+  private updateLeader(): void {
+    const teams = allTeams(this.teams);
+    let lead = teams[0];
+    for (const t of teams) if (lead && t.ram > lead.ram) lead = t;
+    if (!lead || lead.ram < 3 || lead.id === this.leaderId) return;
+    const current = teams.find((t) => t.id === this.leaderId);
+    if (current && current.ram >= lead.ram) return;
+    this.leaderId = lead.id;
+    this.news.report(Headlines.lead(lead.id), 'lead', 6);
   }
 
   // -------------------------------------------------------------------------
@@ -813,7 +1084,10 @@ export class Game implements RivalWorld, JensenWorld {
     this.fx.fling(p.pos, rival.pos, '#2fbf6a', n * 5 + 3);
     this.screenFx.flash('#ff3b3b', 0.25, 0.3);
     this.sfx.steal();
-    if (n > 0) p.say('Hey! That was my RAM!', 1.8);
+    if (n > 0) {
+      p.say('Hey! That was my RAM!', 1.8);
+      this.news.report(Headlines.stolen(rival.label, n), 'steal', 8);
+    }
     return n;
   }
 
@@ -829,6 +1103,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.screenFx.flash('#ffd23f', 0.15, 0.2);
     this.sfx.zap();
     p.say(pick(['Stop distilling me!', 'Hey, those are my weights!']), 1.6);
+    this.news.report(Headlines.distilled(rival.label), 'distill', 15);
   }
 
   knockPlayer(from: Vec, force: number): void {
@@ -877,6 +1152,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.fx.ring(pc.x, pc.y, '#5dff9a', 60, 0.5, 3);
     this.sfx.pool();
     p.say(pick(POOL_LINES), 2.2);
+    this.news.report(Headlines.pooled(c.profile.name), 'pool', 0);
   }
 
   private spawnCivilian(): void {
@@ -962,6 +1238,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.fx.text(x, y - 70, 'FREE GPUs!', '#ffd75e', 14);
     this.screenFx.flash(JENSEN_COLOR, 0.12, 0.3);
     this.sfx.giveaway();
+    this.news.report(Headlines.keynote(), 'keynote', 0);
   }
 
   jensenPitch(_jensen: Jensen, pitch: string): void {
@@ -993,6 +1270,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.sfx.deal();
     j?.resolve(true);
     p.say(pick(LOAN_YES_LINES), 2);
+    this.news.report(Headlines.loanTaken(), 'loan', 0);
   }
 
   /** Saying no is free, but someone else always takes the deal. */
@@ -1003,6 +1281,7 @@ export class Game implements RivalWorld, JensenWorld {
     taker.gpus += LOAN_GPUS;
     this.jensen?.resolve(false, taker.name);
     this.sfx.denied();
+    this.news.report(Headlines.loanDeclined(taker.name), 'loan', 0);
   }
 
   // -------------------------------------------------------------------------
@@ -1109,6 +1388,19 @@ export class Game implements RivalWorld, JensenWorld {
       energyPulse: this.screenFx.energyPulse,
       bubblePulse: this.screenFx.bubblePulse,
       bubbleNote: this.bubbleNote,
+      news: {
+        headline: this.news.ticker?.text ?? null,
+        headlineAge: this.news.ticker?.age ?? 0,
+        story: this.news.active
+          ? {
+              title: this.news.active.story.title,
+              rule: this.news.active.story.rule,
+              timeLeft: this.news.active.timeLeft,
+              duration: this.news.active.story.duration,
+            }
+          : null,
+      },
+      tweetReady: 1 - p.tweetCooldown / TWEET_COOLDOWN,
     });
     drawMinimap(ctx, {
       player: p.pos,
@@ -1134,7 +1426,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.screenFx.drawFront(ctx);
 
     if (this.banner && this.state === 'playing') {
-      drawBanner(ctx, this.banner.title, this.banner.sub, Math.min(1, this.banner.time / 0.6));
+      drawBanner(ctx, this.banner.title, this.banner.sub, Math.min(1, this.banner.time / 0.6), this.banner.color);
     }
     if (this.state === 'paused') drawPaused(ctx);
     if (this.state === 'levelClear' && this.clearInfo) drawLevelClear(ctx, this.clearInfo, this.stateTime);
@@ -1183,6 +1475,7 @@ export class Game implements RivalWorld, JensenWorld {
       if (inView(c.pos, 30) && dist(c.pos, p.pos) > vr * 0.7) c.drawBeacon(ctx, t);
     }
     if (this.jensen && inView(this.jensen.pos, 300)) this.jensen.drawSpotlight(ctx, t);
+    if (this.rain && inView(this.rain.pos, 400)) this.drawRainZone(this.rain, t);
     for (const c of this.civilians) if (inView(c.pos, 120)) c.drawSpeech(ctx);
     for (const r of this.rivals) if (inView(r.pos, 120)) r.drawSpeech(ctx);
     this.jensen?.drawSpeech(ctx);
@@ -1190,10 +1483,46 @@ export class Game implements RivalWorld, JensenWorld {
     this.fx.drawOverlay(ctx);
     ctx.restore();
 
+    if (this.news.isRunning('heatwave')) this.drawVignette(88, 65, 35, '255, 150, 40', 3);
     this.drawVignette(this.player.heat, 65, 35, '255, 40, 20', 9);
     this.drawVignette(this.bubble * 100, 80, 20, '255, 90, 200', 12);
     this.drawNavigation(ox, oy);
     this.drawHints();
+  }
+
+  /** Above the fog: where the RAM rain comes down, and streaks for drops still in the air. */
+  private drawRainZone(rain: { pos: Vec; drops: readonly Pickup[] }, t: number): void {
+    const ctx = this.ctx;
+    const { x, y } = rain.pos;
+    ctx.save();
+    ctx.strokeStyle = `rgba(93, 255, 154, ${0.45 + 0.25 * Math.sin(t * 6)})`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = -t * 40;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 125, 95, 0, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    for (const pk of rain.drops) {
+      if (!pk.airborne) continue;
+      const top = pk.pos.y - pk.z;
+      const g = ctx.createLinearGradient(0, top - 50, 0, top);
+      g.addColorStop(0, 'rgba(93, 255, 154, 0)');
+      g.addColorStop(1, 'rgba(157, 255, 191, 0.9)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(pk.pos.x, top - 50);
+      ctx.lineTo(pk.pos.x, top);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+    ctx.font = pixelFont(9);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    outlinedText(ctx, 'RAM RAIN', x, y - 110, '#5dff9a');
+    ctx.restore();
   }
 
   private drawFog(px: number, py: number, r: number): void {
@@ -1266,6 +1595,7 @@ export class Game implements RivalWorld, JensenWorld {
     // Green to Jensen's keynote when it's out in the dark, so the free GPUs aren't missed.
     const j = this.jensen;
     if (j && j.visit === 'giveaway') this.drawArrow(ox, oy, j.pos, this.visionRadius() * 0.9, JENSEN_COLOR);
+    if (this.rain) this.drawArrow(ox, oy, this.rain.pos, 130, '#5dff9a');
   }
 
   private drawArrow(ox: number, oy: number, target: Vec, minDist: number, color: string): void {
@@ -1311,6 +1641,8 @@ export class Game implements RivalWorld, JensenWorld {
       hint = 'Tip: SPACE shoves rivals. It costs energy, feeds the bubble, and they hit back!';
     } else if (this.level === 1 && this.levelTime > 11 && this.levelTime < 18) {
       hint = 'Tip: stand next to people with glowing PCs to take their idle RAM. Bad press, though!';
+    } else if (this.level === 1 && this.levelTime > 19 && this.levelTime < 26) {
+      hint = 'Tip: T posts a hype tweet. Nearby rivals stop to read it, but hype inflates the bubble!';
     }
     if (!hint) return;
     const ctx = this.ctx;
@@ -1328,7 +1660,8 @@ export class Game implements RivalWorld, JensenWorld {
     ctx.font = pixelFont(10);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    outlinedText(ctx, this.toast.text, VIEW_W / 2, 84, '#ffffff', '#2a0f3d', 4);
+    // Below the news ticker in game; under the logo on the title screen.
+    outlinedText(ctx, this.toast.text, VIEW_W / 2, this.state === 'title' ? 84 : 132, '#ffffff', '#2a0f3d', 4);
     ctx.restore();
   }
 }

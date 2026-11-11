@@ -2,7 +2,7 @@ import type { Sfx } from '../audio/sfx';
 import { FURY_SPEED, FURY_TIME, RIVAL_BOOST_TIME, RIVAL_SPEED_SCALE, STUN_TIME, WORLD_H, WORLD_W } from '../config';
 import type { Effects } from '../fx/effects';
 import { clamp, dist, length, lerp, normalize, pick, rand, scale, shuffle, sub, vec, type Vec } from '../math';
-import { TAU, dot, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, type ChibiStyle } from '../render/draw';
+import { TAU, dot, drawChibi, droplet, groundShadow, outlinedText, pixelFont, speechBubble, type ChibiStyle } from '../render/draw';
 import type { Pickup } from './pickup';
 import type { Player } from './player';
 
@@ -37,6 +37,29 @@ export interface RivalWorld {
 }
 
 const newTeam = (id: string, name: string, color: string): Team => ({ id, name, color, ram: 0, gpus: 0 });
+
+/**
+ * Something that makes a rival stop playing for a while: reading Sam's tweet, panicking about the
+ * markets, attending Dario's safety summit, or giving it.
+ */
+export type DistractionKind = 'phone' | 'panic' | 'summit' | 'lecture';
+
+export interface DistractOptions {
+  /** Walk here first (the summit), then stand around. */
+  goTo?: Vec;
+  /** Said once, right away. */
+  line?: string;
+  /** Said every few seconds while it lasts. */
+  chatter?: readonly string[];
+}
+
+interface Distraction {
+  kind: DistractionKind;
+  time: number;
+  goTo: Vec | null;
+  chatter: readonly string[];
+  chatterTimer: number;
+}
 
 export function createTeams(): Teams {
   return {
@@ -74,6 +97,7 @@ export abstract class Rival {
   protected abstract readonly hurtLines: readonly string[];
   protected abstract readonly angryLines: readonly string[];
   private furyPending = false;
+  private distraction: Distraction | null = null;
   private hurtFlash = 0;
   private wanderAngle = rand(0, TAU);
   private speech: string | null = null;
@@ -100,6 +124,15 @@ export abstract class Rival {
     return this.fury > 0;
   }
 
+  get distracted(): DistractionKind | null {
+    return this.distraction?.kind ?? null;
+  }
+
+  /** Stunned or distracted: can't collect anything and can't touch Sam. */
+  get busy(): boolean {
+    return this.stun > 0 || this.distraction !== null;
+  }
+
   /** Sam landed a shove: stun, knock back, complain, and get furious once the stun wears off. */
   hit(dir: Vec): void {
     this.stun = STUN_TIME;
@@ -108,15 +141,36 @@ export abstract class Rival {
     this.target = null;
     this.fury = 0;
     this.furyPending = true;
+    this.distraction = null; // a shove snaps you out of anything
     this.say(pick(this.hurtLines), 1.4);
+    this.onInterrupted();
     this.onStunned();
   }
 
   /** Start hunting Sam for revenge. */
-  enrage(): void {
-    this.fury = FURY_TIME;
+  enrage(duration = FURY_TIME): void {
+    this.fury = duration;
     this.furyPending = false;
+    this.distraction = null;
     this.say(pick(this.angryLines), 2);
+  }
+
+  /**
+   * Stop playing for `time` seconds. Fury and strategy are paused, not forgotten.
+   * A shorter distraction doesn't cut a longer one short.
+   */
+  distract(kind: DistractionKind, time: number, opts: DistractOptions = {}): void {
+    if (this.distraction && this.distraction.time > time) return;
+    this.distraction = {
+      kind,
+      time,
+      goTo: opts.goTo ? { ...opts.goTo } : null,
+      chatter: opts.chatter ?? [],
+      chatterTimer: rand(1.6, 2.6),
+    };
+    this.target = null;
+    if (opts.line) this.say(opts.line, 1.8);
+    this.onInterrupted();
   }
 
   /** Touching Sam: a furious rival takes revenge, otherwise it's the rival's own behavior. */
@@ -151,7 +205,10 @@ export abstract class Rival {
     this.boost = RIVAL_BOOST_TIME;
   }
 
-  /** Hook for rivals with their own state machine. */
+  /** Hook for rivals with their own state machine: stunned or distracted mid-move. */
+  protected onInterrupted(): void {}
+
+  /** Hook: just got stunned by Sam. */
   protected onStunned(): void {}
 
   update(dt: number, world: RivalWorld): void {
@@ -167,6 +224,12 @@ export abstract class Rival {
       this.vel.y *= k;
       this.move(dt);
       if (this.stun <= 0 && this.furyPending) this.enrage();
+      return;
+    }
+
+    if (this.distraction) {
+      this.updateDistraction(dt, world, this.distraction);
+      this.move(dt);
       return;
     }
 
@@ -191,8 +254,22 @@ export abstract class Rival {
     this.move(dt);
 
     for (const p of world.pickups) {
-      if (p.alive && dist(p.pos, this.pos) < this.radius + p.radius) world.rivalCollect(this, p);
+      if (p.alive && !p.airborne && dist(p.pos, this.pos) < this.radius + p.radius) world.rivalCollect(this, p);
     }
+  }
+
+  private updateDistraction(dt: number, world: RivalWorld, d: Distraction): void {
+    d.time -= dt;
+    if (d.goTo && dist(this.pos, d.goTo) > 40) this.steer(sub(d.goTo, this.pos), this.speed(world), dt, 4);
+    else this.brake(dt, 8);
+    if (d.chatter.length) {
+      d.chatterTimer -= dt;
+      if (d.chatterTimer <= 0) {
+        d.chatterTimer = rand(2.4, 3.4);
+        this.say(pick(d.chatter), 2);
+      }
+    }
+    if (d.time <= 0) this.distraction = null;
   }
 
   private move(dt: number): void {
@@ -230,6 +307,7 @@ export abstract class Rival {
         drawStar(ctx, this.pos.x + Math.cos(a) * 14, cy + Math.sin(a) * 4, 4.5, '#ffe066');
       }
     }
+    if (this.distraction) this.drawDistraction(ctx, time, this.distraction);
     if (this.fury > 0) {
       ctx.strokeStyle = `rgba(255, 60, 60, ${0.5 + 0.3 * Math.sin(time * 16)})`;
       ctx.lineWidth = 2.5;
@@ -249,6 +327,101 @@ export abstract class Rival {
 
   drawSpeech(ctx: CanvasRenderingContext2D): void {
     if (this.speech) speechBubble(ctx, this.pos.x, this.pos.y - this.radius - 22, this.speech, this.team.color);
+  }
+
+  private drawDistraction(ctx: CanvasRenderingContext2D, time: number, d: Distraction): void {
+    const { x, y } = this.pos;
+    const r = this.radius;
+    switch (d.kind) {
+      case 'phone': {
+        // Head down, reading Sam's latest post.
+        const glow = ctx.createRadialGradient(x, y, 1, x, y, r);
+        glow.addColorStop(0, 'rgba(155, 231, 255, 0.55)');
+        glow.addColorStop(1, 'rgba(155, 231, 255, 0)');
+        ctx.fillStyle = glow;
+        dot(ctx, x, y, r);
+        ctx.fillStyle = '#1b1b24';
+        ctx.beginPath();
+        ctx.roundRect(x - 4.5, y - 2, 9, 13, 2);
+        ctx.fill();
+        ctx.fillStyle = '#9be7ff';
+        ctx.fillRect(x - 3, y, 6, 8);
+        ctx.fillStyle = '#1b1b24';
+        for (let i = 0; i < 3; i++) ctx.fillRect(x - 2, y + 1.5 + i * 2.2 - ((time * 6) % 2.2), 4, 0.8);
+        break;
+      }
+      case 'panic': {
+        // Sweating over a crashing chart.
+        const cx = x + (Math.random() - 0.5) * 2;
+        const cy = y - r - 30;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#2a0f3d';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(cx - 12, cy - 8, 24, 16, 3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = '#ff3b3b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, cy - 5);
+        ctx.lineTo(cx - 3, cy - 1);
+        ctx.lineTo(cx, cy - 3);
+        ctx.lineTo(cx + 8, cy + 5);
+        ctx.stroke();
+        const k = (time * 2.5 + this.t) % 1;
+        ctx.fillStyle = `rgba(140, 210, 255, ${1 - k})`;
+        droplet(ctx, x + r * 0.75, y - r * 0.6 + k * 10, 3.2);
+        ctx.fill();
+        break;
+      }
+      case 'summit': {
+        if (d.goTo && dist(this.pos, d.goTo) > 40) break; // still on the way
+        // Bored in the audience.
+        ctx.font = pixelFont(8);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < 2; i++) {
+          const k = (time * 0.7 + i * 0.5 + this.t) % 1;
+          ctx.globalAlpha = Math.sin(k * Math.PI);
+          outlinedText(ctx, 'z', x + r * 0.6 + k * 10, y - r - 4 - k * 18, '#cfe8ff');
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case 'lecture': {
+        // A whiteboard with one very important chart.
+        const bx = x + r + 6;
+        const by = y - r - 10;
+        ctx.strokeStyle = '#5a4636';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx + 5, by + 20);
+        ctx.lineTo(bx + 2, by + 34);
+        ctx.moveTo(bx + 25, by + 20);
+        ctx.lineTo(bx + 28, by + 34);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#9c4c30';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, 30, 21, 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = pixelFont(5);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#9c4c30';
+        ctx.fillText('P(DOOM)', bx + 15, by + 3);
+        ctx.strokeStyle = '#ff3b3b';
+        ctx.beginPath();
+        ctx.moveTo(bx + 4, by + 18);
+        ctx.lineTo(bx + 14, by + 15);
+        ctx.lineTo(bx + 26, by + 9);
+        ctx.stroke();
+        break;
+      }
+    }
   }
 
   protected speed(world: RivalWorld): number {
@@ -492,7 +665,7 @@ export class Elon extends Rival {
     this.dashCooldown = rand(4.5, 6.5);
   }
 
-  protected override onStunned(): void {
+  protected override onInterrupted(): void {
     this.endDash();
   }
 
@@ -571,7 +744,7 @@ export class Gemini extends Rival {
     }
 
     for (const p of w.pickups) {
-      if (!p.alive) continue;
+      if (!p.alive || p.airborne) continue;
       const d = dist(p.pos, this.pos);
       if (d < this.magnet && d > 1) {
         const n = normalize(sub(this.pos, p.pos));

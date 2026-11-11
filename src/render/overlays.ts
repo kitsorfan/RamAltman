@@ -11,6 +11,8 @@ export interface LevelClearInfo {
   leaderBonus: number;
   rank: number;
   score: number;
+  /** A one-liner under the title. */
+  quip: string;
 }
 
 export interface GameOverInfo {
@@ -42,13 +44,19 @@ function card(ctx: CanvasRenderingContext2D, w: number, h: number, accent: strin
   return { x, y };
 }
 
-export function drawBanner(ctx: CanvasRenderingContext2D, title: string, sub: string, alpha: number): void {
+export function drawBanner(
+  ctx: CanvasRenderingContext2D,
+  title: string,
+  sub: string,
+  alpha: number,
+  color = '#ffe066',
+): void {
   ctx.save();
   ctx.globalAlpha = clamp(alpha, 0, 1);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = pixelFont(30);
-  outlinedText(ctx, title, VIEW_W / 2, 196, '#ffe066', '#2a0f3d', 8);
+  outlinedText(ctx, title, VIEW_W / 2, 196, color, '#2a0f3d', 8);
   ctx.font = uiFont(18, 700);
   outlinedText(ctx, sub, VIEW_W / 2, 234, '#ffffff', 'rgba(10, 6, 20, 0.9)', 4);
   ctx.restore();
@@ -78,7 +86,7 @@ export function drawLevelClear(ctx: CanvasRenderingContext2D, info: LevelClearIn
   outlinedText(ctx, `SERIES ${seriesName(info.level)} CLOSED!`, cx, y + 54, '#5dff9a', '#0b2a18', 5);
   ctx.font = uiFont(15, 600);
   ctx.fillStyle = '#d9d2f2';
-  ctx.fillText('Valuation up. The bubble holds… for now.', cx, y + 86);
+  ctx.fillText(info.quip, cx, y + 86);
 
   const rows: Array<[string, string]> = [
     ['RAM secured', `${info.ram} / ${info.target}`],

@@ -72,6 +72,23 @@ export const LOAN_GPUS = 3;
 export const LOAN_BUBBLE = 0.08;
 export const LOAN_OFFER_TIME = 7; // seconds to decide before the offer expires
 
+// Hype tweet: T makes Sam vague-post. Nearby rivals stop to read it. Hype is what inflates bubbles, so it costs bubble.
+export const TWEET_COOLDOWN = 14;
+export const TWEET_RANGE = 480; // rivals within this distance stop to read
+export const TWEET_READ_TIME = 2.4;
+export const TWEET_BUBBLE = 0.04;
+
+// Overheating gets Sam fired by the board. He stands there holding a box until he's rehired.
+export const FIRED_TIME = 1.2;
+
+// Breaking news: a random event every so often changes the rules for a few seconds.
+export const NEWS_FIRST: readonly [number, number] = [22, 30]; // seconds into a level
+export const NEWS_INTERVAL: readonly [number, number] = [24, 32]; // from the end of one event to the next
+export const RAIN_RAM = 10; // plus one per level
+export const HEATWAVE_MULT = 1.8;
+export const PANIC_BUBBLE = 0.06; // a DeepSeek moment lets some air out of the bubble
+export const LAWSUIT_FURY = 9;
+
 // Scoring.
 export const COMBO_WINDOW = 2.5;
 export const COMBO_MAX = 8;

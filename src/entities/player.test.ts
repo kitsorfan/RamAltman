@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLAYER_SPEED, SHOVE_COOLDOWN, WORLD_H, WORLD_W } from '../config';
+import { FIRED_TIME, PLAYER_SPEED, SHOVE_COOLDOWN, TWEET_COOLDOWN, WORLD_H, WORLD_W } from '../config';
 import { Player } from './player';
 
 const STILL = { x: 0, y: 0 };
@@ -58,5 +58,40 @@ describe('Player (Sam)', () => {
     expect(p.canShove).toBe(false);
     run(p, SHOVE_COOLDOWN);
     expect(p.canShove).toBe(true);
+  });
+});
+
+describe('Sam getting fired', () => {
+  it('stands still holding his box, then can move again', () => {
+    const p = new Player();
+    p.fire(FIRED_TIME);
+    expect(p.canShove).toBe(false);
+    expect(p.canTweet).toBe(false);
+    const startX = p.pos.x;
+    run(p, FIRED_TIME * 0.9, { x: 1, y: 0 });
+    expect(p.pos.x).toBe(startX);
+    run(p, FIRED_TIME * 0.2 + 0.5, { x: 1, y: 0 });
+    expect(p.pos.x).toBeGreaterThan(startX);
+    expect(p.canShove).toBe(true);
+  });
+
+  it('a new level clears it', () => {
+    const p = new Player();
+    p.fire(FIRED_TIME);
+    p.reset();
+    expect(p.fired).toBe(0);
+  });
+});
+
+describe('hype tweet', () => {
+  it('has to wait for the cooldown before posting again', () => {
+    const p = new Player();
+    expect(p.canTweet).toBe(true);
+    p.tweet('feel the agi', TWEET_COOLDOWN);
+    expect(p.canTweet).toBe(false);
+    run(p, TWEET_COOLDOWN - 0.5);
+    expect(p.canTweet).toBe(false);
+    run(p, 1);
+    expect(p.canTweet).toBe(true);
   });
 });

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { AudioEngine } from '../audio/engine';
 import { Sfx } from '../audio/sfx';
-import { STUN_TIME } from '../config';
+import { FURY_TIME, STUN_TIME } from '../config';
 import { Effects } from '../fx/effects';
-import { length } from '../math';
+import { dist, length } from '../math';
 import { Pickup } from './pickup';
 import { Player } from './player';
 import { Dario, Elon, SwarmBot, allTeams, createTeams, spawnRivals, type Rival, type RivalWorld } from './rivals';
@@ -147,5 +147,99 @@ describe('rival behavior', () => {
     expect(dario.boost).toBeGreaterThan(0);
     step(dario, world, 5);
     expect(dario.boost).toBe(0);
+  });
+});
+
+describe('distractions (tweets, panics, summits)', () => {
+  it('a distracted rival stops, collects nothing, and leaves Sam alone', () => {
+    const { world, pickups } = makeWorld();
+    const dario = new Dario(createTeams().dario, { x: 500, y: 500 });
+    dario.vel = { x: 150, y: 0 };
+    dario.distract('phone', 2);
+    expect(dario.distracted).toBe('phone');
+    expect(dario.busy).toBe(true);
+    pickups.push(new Pickup('ram', { x: 505, y: 500 }));
+    step(dario, world, 1);
+    expect(length(dario.vel)).toBeLessThan(5);
+    expect(pickups[0]?.alive).toBe(true);
+  });
+
+  it('goes back to playing once it ends', () => {
+    const { world, pickups } = makeWorld();
+    const dario = new Dario(createTeams().dario, { x: 500, y: 500 });
+    dario.distract('panic', 1);
+    pickups.push(new Pickup('ram', { x: 505, y: 500 }));
+    step(dario, world, 1.2);
+    expect(dario.distracted).toBeNull();
+    expect(dario.busy).toBe(false);
+    expect(pickups[0]?.alive).toBe(false);
+  });
+
+  it('walks to the summit before sitting down', () => {
+    const { world } = makeWorld();
+    const gemini = spawnRivals(createTeams()).find((r) => r.team.id === 'gemini');
+    expect(gemini).toBeDefined();
+    if (!gemini) return;
+    gemini.pos = { x: 500, y: 500 };
+    const seat = { x: 800, y: 500 };
+    gemini.distract('summit', 8, { goTo: seat });
+    step(gemini, world, 5);
+    expect(dist(gemini.pos, seat)).toBeLessThan(60);
+    expect(gemini.distracted).toBe('summit');
+  });
+
+  it('a quick tweet does not cut a long summit short', () => {
+    const dario = new Dario(createTeams().dario, { x: 500, y: 500 });
+    dario.distract('lecture', 9);
+    dario.distract('phone', 2);
+    expect(dario.distracted).toBe('lecture');
+  });
+
+  it('a shove snaps a rival out of it', () => {
+    const dario = new Dario(createTeams().dario, { x: 500, y: 500 });
+    dario.distract('phone', 2);
+    dario.hit({ x: 1, y: 0 });
+    expect(dario.distracted).toBeNull();
+    expect(dario.stunned).toBe(true);
+  });
+
+  it('pauses fury instead of forgetting it', () => {
+    const { world } = makeWorld();
+    const dario = new Dario(createTeams().dario, { x: 500, y: 500 });
+    dario.enrage(5);
+    dario.distract('phone', 2);
+    step(dario, world, 2.1);
+    expect(dario.furious).toBe(true);
+    expect(dario.fury).toBeCloseTo(5, 0);
+  });
+
+  it('a lawsuit can make Elon furious for longer than a shove would', () => {
+    const elon = new Elon(createTeams().elon, { x: 500, y: 500 });
+    elon.enrage(FURY_TIME + 3);
+    expect(elon.fury).toBe(FURY_TIME + 3);
+  });
+
+  it("Elon's dash is called off when he stops to read", () => {
+    const { world, player } = makeWorld();
+    player.ram = 5;
+    const elon = new Elon(createTeams().elon, { x: player.pos.x + 200, y: player.pos.y });
+    for (let t = 0; t < 10 && length(elon.vel) < 400; t += 1 / 60) {
+      if (length(elon.vel) < 300) elon.pos = { x: player.pos.x + 200, y: player.pos.y };
+      elon.update(1 / 60, world);
+    }
+    expect(length(elon.vel)).toBeGreaterThan(400);
+    elon.distract('phone', 2);
+    step(elon, world, 0.5);
+    expect(length(elon.vel)).toBeLessThan(100);
+  });
+
+  it('nobody can grab RAM that is still falling', () => {
+    const { world, pickups } = makeWorld();
+    const dario = new Dario(createTeams().dario, { x: 500, y: 500 });
+    const drop = new Pickup('ram', { x: 505, y: 500 });
+    drop.z = 600;
+    pickups.push(drop);
+    dario.update(1 / 60, world);
+    expect(drop.alive).toBe(true);
   });
 });

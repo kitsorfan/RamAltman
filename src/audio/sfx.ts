@@ -138,6 +138,37 @@ export class Sfx {
     this.tone(2093, 0.3, { type: 'square', vol: 0.08, delay: 0.12 });
   }
 
+  /** TV news sting: "dun, dun, DUNNN". */
+  breaking(): void {
+    [988, 740, 494].forEach((f, i) => this.tone(f, 0.11, { type: 'square', vol: 0.09, delay: i * 0.1, cutoff: 3500 }));
+    [247, 311, 370].forEach((f) => this.tone(f, 0.6, { type: 'sawtooth', vol: 0.06, delay: 0.3, cutoff: 1800, sustain: 0.5 }));
+    this.noise(0.3, 0.15, 5000, 0.3);
+  }
+
+  /** Two quick chirps: a post goes out. */
+  tweet(): void {
+    this.tone(2200, 0.07, { type: 'sine', slide: 3400, vol: 0.1 });
+    this.tone(2600, 0.08, { type: 'sine', slide: 3900, vol: 0.1, delay: 0.09 });
+  }
+
+  /** Sad trombone. */
+  fired(): void {
+    [392, 370, 349].forEach((f, i) => this.tone(f, 0.26, { type: 'sawtooth', vol: 0.1, delay: 0.35 + i * 0.28, cutoff: 1400 }));
+    this.tone(330, 0.9, { type: 'sawtooth', slide: 280, vol: 0.1, delay: 1.19, cutoff: 1400, sustain: 0.6 });
+  }
+
+  /** Back in the building. */
+  rehired(): void {
+    [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', vol: 0.13, delay: i * 0.06 }));
+    this.noise(0.2, 0.12, 6000, 0.2);
+  }
+
+  /** Something heavy lands in the sand. */
+  thud(): void {
+    this.noise(0.12, 0.2, 600);
+    this.tone(130, 0.12, { type: 'triangle', slide: 60, vol: 0.12 });
+  }
+
   levelUp(): void {
     [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.18, { vol: 0.1, delay: i * 0.09 }));
   }
