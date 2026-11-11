@@ -14,6 +14,15 @@ function run(desk: NewsDesk, seconds: number, canBreak = true): NewsStory[] {
   return broke;
 }
 
+/** Runs the desk until a story breaks (at most `seconds`) and stops right there. */
+function runUntilStory(desk: NewsDesk, seconds: number): NewsStory | undefined {
+  for (let t = 0; t < seconds; t += DT) {
+    const story = desk.update(DT);
+    if (story) return story;
+  }
+  return undefined;
+}
+
 describe('breaking news', () => {
   it('every story explains itself and runs for a few seconds', () => {
     for (const kind of NEWS_KINDS) {
@@ -31,16 +40,20 @@ describe('breaking news', () => {
   it('breaks the first story a little way into a level', () => {
     const desk = new NewsDesk();
     expect(run(desk, NEWS_FIRST[0] - 1)).toEqual([]);
-    expect(run(desk, NEWS_FIRST[1] - NEWS_FIRST[0] + 2)).toHaveLength(1);
-    expect(desk.active).not.toBeNull();
+    // Check as it breaks: a short story that broke early may already be over a few seconds later.
+    const story = runUntilStory(desk, NEWS_FIRST[1] - NEWS_FIRST[0] + 2);
+    expect(story).toBeDefined();
+    expect(desk.active?.story).toBe(story);
   });
 
   it('runs one story at a time, with a breather in between', () => {
     const desk = new NewsDesk();
-    const first = run(desk, NEWS_FIRST[1] + 0.1)[0];
+    // Time from the moment it breaks: the first story lands at a random point in NEWS_FIRST.
+    const first = runUntilStory(desk, NEWS_FIRST[1] + 0.1);
     expect(first).toBeDefined();
     if (!first) return;
     expect(run(desk, first.duration - 0.5)).toEqual([]); // still running
+    expect(desk.active).not.toBeNull();
     expect(run(desk, 0.5 + NEWS_INTERVAL[0] - 1)).toEqual([]); // ended, but the next isn't due yet
     expect(desk.active).toBeNull();
   });
