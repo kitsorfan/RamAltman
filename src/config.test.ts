@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RAM_SPAWN_INTERVAL, bubbleDuration, levelTarget, ramOnField, seriesName, waterCount } from './config';
+import { RAM_SPAWN_INTERVAL, bubbleDuration, levelTarget, ramOnField, seriesName, swarmSize, waterCount } from './config';
 
 describe('level tuning', () => {
   it('names levels after funding rounds', () => {
@@ -30,5 +30,17 @@ describe('level tuning', () => {
   it('always leaves at least two oases', () => {
     expect(waterCount(1)).toBeGreaterThanOrEqual(waterCount(10));
     expect(waterCount(100)).toBe(2);
+  });
+});
+
+describe('Chinese Labs', () => {
+  it('drop just one model in Series A, then one more each series', () => {
+    expect(swarmSize(1)).toBe(1);
+    for (let level = 1; level < 5; level++) expect(swarmSize(level + 1)).toBe(swarmSize(level) + 1);
+  });
+
+  it('stop growing at five models', () => {
+    expect(swarmSize(5)).toBe(5);
+    expect(swarmSize(40)).toBe(5);
   });
 });

@@ -55,6 +55,12 @@ export const WATER_RESPAWN_DELAY = 4;
 export const RIVAL_SPEED_SCALE = 1.0;
 export const RIVAL_BOOST_TIME = 4; // speed boost after a rival grabs an energy cell
 
+// Chinese Labs: their models drop in out of nowhere, close to Sam. One in Series A, one more each series.
+export const swarmSize = (level: number): number => Math.min(5, Math.max(1, level));
+export const SWARM_FIRST: readonly [number, number] = [6, 12]; // seconds into a level
+export const SWARM_INTERVAL: readonly [number, number] = [9, 15]; // between drops
+export const SWARM_DROP_DIST: readonly [number, number] = [190, 300]; // from Sam
+
 // People out in the desert with idle RAM in their PCs. Stand next to one and Sam pools it to the cloud.
 // The price: you have to stay put while it uploads, and every take is bad press for the bubble.
 export const CIVILIANS_ON_FIELD = 3;

@@ -52,7 +52,7 @@ Every 30 to 40 seconds a story breaks and changes the rules for a few seconds. T
 | Dario | Picks RAM far from you, steers around you, and stops now and then for safety evals. Never steals. |
 | Elon | Goes for GPUs. When you carry RAM and he is close, he winds up (red `!`) and dashes. A hit steals 2 RAM. |
 | Gemini | Slow, but pulls nearby pickups toward him and teleports to the densest cluster every ~10s. |
-| Chinese Labs | Three fast, small bots. They predict where you are heading and grab it first. Touching one drains 15 energy. |
+| Chinese Labs | Fast, small models (DeepSeek, Qwen, Kimi, GLM, MiniMax) that drop in out of nowhere, close to you and often right in your path. Only one in Series A, then one more each series, up to five. They predict where you are heading and grab it first. Touching one drains 15 energy. |
 
 ## Development
 
@@ -76,7 +76,7 @@ npm run dev          # open the printed localhost URL
 | `npm run test:e2e` | End-to-end tests with [Playwright](https://playwright.dev) against the production build |
 | `npm run check` | Lint, unit tests, type-check and build in one go |
 
-In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away, or `game.breakNews('rain')` to break a story: `rain`, `panic`, `heatwave`, `lawsuit` or `summit`). It is stripped from production builds.
+In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away, or `game.breakNews('rain')` to break a story: `rain`, `panic`, `heatwave`, `lawsuit` or `summit`, or `game.dropModel()` to drop in a Chinese Labs model). It is stripped from production builds.
 
 ### Testing
 

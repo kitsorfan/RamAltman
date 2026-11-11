@@ -120,6 +120,8 @@ export const Headlines = {
   fired: (): string => pick(['Board fires Sam for "not being consistently cool"', 'Sam fired after data center overheats']),
   rehired: (): string => pick(['Sam rehired after staff threaten to quit', 'Board "never really meant it," rehires Sam']),
   tweet: (text: string): string => `Sam tweets "${text}". Bubble inflates.`,
+  modelDrop: (name: string): string =>
+    pick([`${name} drops out of nowhere, matches the frontier`, `${name} released overnight for $5M. Markets confused.`, `Surprise: ${name} is out, and it's open weights`]),
   bubbleDanger: (): string => pick(['Analysts: "This is definitely NOT a bubble"', 'Experts agree bubble will "probably" hold']),
 } as const;
 

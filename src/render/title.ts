@@ -53,7 +53,7 @@ const CARDS = [
   { name: 'DARIO', color: '#e8875f', text: 'Avoids you and stops for safety evals. Never steals.', cast: [0] },
   { name: 'ELON', color: '#c3c9d6', text: 'A red ! means he is about to charge. A hit steals 2 RAM.', cast: [1] },
   { name: 'GEMINI', color: '#7aa2ff', text: 'Magnet-pulls RAM and teleports to the good stuff.', cast: [2] },
-  { name: 'CHINESE LABS', color: '#ff4d5e', text: 'A fast swarm. Snipes your path and drains your energy.', cast: [3, 4, 5] },
+  { name: 'CHINESE LABS', color: '#ff4d5e', text: 'Drop in out of nowhere, more every series. Drain your energy.', cast: [3, 4, 5] },
 ] as const;
 
 const CONTROLS: ReadonlyArray<{ keys: readonly string[]; label: string }> = [

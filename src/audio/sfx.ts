@@ -163,6 +163,13 @@ export class Sfx {
     this.noise(0.2, 0.12, 6000, 0.2);
   }
 
+  /** Glitchy blips and a zap: a new model drops out of nowhere. */
+  modelDrop(): void {
+    [1568, 784, 2093, 1046].forEach((f, i) => this.tone(f, 0.05, { type: 'square', vol: 0.07, delay: i * 0.045 }));
+    this.noise(0.18, 0.2, 4500, 0.05);
+    this.tone(180, 0.25, { type: 'sawtooth', slide: 900, vol: 0.08, delay: 0.1 });
+  }
+
   /** Something heavy lands in the sand. */
   thud(): void {
     this.noise(0.12, 0.2, 600);

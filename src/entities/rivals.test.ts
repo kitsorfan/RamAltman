@@ -6,7 +6,7 @@ import { Effects } from '../fx/effects';
 import { dist, length } from '../math';
 import { Pickup } from './pickup';
 import { Player } from './player';
-import { Dario, Elon, SwarmBot, allTeams, createTeams, spawnRivals, type Rival, type RivalWorld } from './rivals';
+import { Dario, Elon, SWARM_NAMES, SwarmBot, allTeams, createTeams, spawnRivals, type Rival, type RivalWorld } from './rivals';
 
 /** A tiny stand-in for the Game: records what rivals do to Sam. */
 function makeWorld() {
@@ -60,6 +60,26 @@ describe('teams', () => {
     const bots = rivals.filter((r) => r instanceof SwarmBot);
     expect(bots).toHaveLength(3);
     expect(bots.every((b) => b.team === teams.china)).toBe(true);
+  });
+
+  it('can start with no Chinese Labs models on the field (in a game they drop in later)', () => {
+    const rivals = spawnRivals(createTeams(), 0);
+    expect(rivals).toHaveLength(3);
+    expect(rivals.some((r) => r instanceof SwarmBot)).toBe(false);
+  });
+
+  it('names the models in the order they drop', () => {
+    const bots = spawnRivals(createTeams(), SWARM_NAMES.length).filter((r) => r instanceof SwarmBot);
+    expect(bots.map((b) => b.label)).toEqual([...SWARM_NAMES]);
+  });
+
+  it('a model that drops in later joins the same swarm', () => {
+    const teams = createTeams();
+    const flock: SwarmBot[] = [];
+    const first = new SwarmBot(teams.china, 'DeepSeek', { x: 500, y: 500 }, flock);
+    const second = new SwarmBot(teams.china, 'Qwen', { x: 900, y: 500 }, flock);
+    first.hit({ x: 1, y: 0 });
+    expect(second.furious).toBe(true);
   });
 });
 

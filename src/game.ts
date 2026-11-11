@@ -44,6 +44,9 @@ import {
   SHOVE_POINTS,
   SHOVE_RANGE,
   START_LIVES,
+  SWARM_DROP_DIST,
+  SWARM_FIRST,
+  SWARM_INTERVAL,
   TIME_BONUS_PER_SEC,
   TWEET_BUBBLE,
   TWEET_COOLDOWN,
@@ -60,6 +63,7 @@ import {
   levelTarget,
   ramOnField,
   seriesName,
+  swarmSize,
   waterCount,
 } from './config';
 import { Effects } from './fx/effects';
@@ -67,7 +71,16 @@ import { Civilian } from './entities/civilian';
 import { JENSEN_COLOR, Jensen, type JensenVisit, type JensenWorld } from './entities/jensen';
 import { Pickup, type PickupKind } from './entities/pickup';
 import { Player } from './entities/player';
-import { allTeams, createTeams, spawnRivals, type Rival, type RivalWorld, type Teams } from './entities/rivals';
+import {
+  SWARM_NAMES,
+  SwarmBot,
+  allTeams,
+  createTeams,
+  spawnRivals,
+  type Rival,
+  type RivalWorld,
+  type Teams,
+} from './entities/rivals';
 import { WaterSource } from './entities/water';
 import type { Input } from './input';
 import { clamp, dist, length, lerp, normalize, pick, rand, sub, vec, type Vec } from './math';
@@ -127,6 +140,7 @@ const START_LINES = ["Let's raise another round!", 'AGI is near. RAM is nearer.'
 const GPU_LINES = ['We need $7 trillion more.', 'Feel the AGI!', 'More compute!', 'Scaling laws, baby.'] as const;
 const WATER_LINES = ['Ahh, liquid cooling.', 'Hydrating the cluster.', 'Water-cooled AGI.'] as const;
 const ENERGY_LINES = ['Fusion would be nice.', 'Charging up!', 'More power!'] as const;
+const DROP_LINES = ['Surprise!', 'Open weights!', 'Trained for $5M!', 'Hello from nowhere!'] as const;
 const POOL_LINES = [
   'Idle RAM is quite terrible.',
   "I'm pooling it to the cloud.",
@@ -203,6 +217,9 @@ export class Game implements RivalWorld, JensenWorld {
   private stepDist = 0;
   private footSide = 1;
   private ghostTimer = 0;
+  /** The Chinese Labs models on the field this level (they drop in over time). */
+  private flock: SwarmBot[] = [];
+  private swarmTimer = 0;
   private readonly hitThisShove = new Set<Rival>();
   /** People out in the desert with idle RAM in their PCs. */
   private civilians: Civilian[] = [];
@@ -420,7 +437,9 @@ export class Game implements RivalWorld, JensenWorld {
     for (let i = 0; i < 2; i++) this.spawnPickup('gpu');
     for (let i = 0; i < ENERGY_ON_FIELD; i++) this.spawnPickup('energy');
     for (let i = 0; i < CIVILIANS_ON_FIELD; i++) this.spawnCivilian();
-    this.rivals = spawnRivals(this.teams);
+    this.rivals = spawnRivals(this.teams, 0);
+    this.flock = [];
+    this.swarmTimer = rand(...SWARM_FIRST);
     this.ramSpawnTimer = RAM_SPAWN_INTERVAL;
     this.gpuSpawnTimer = rand(5, 8);
     this.energySpawnTimer = ENERGY_SPAWN_INTERVAL;
@@ -577,6 +596,7 @@ export class Game implements RivalWorld, JensenWorld {
       if (dist(r.pos, p.pos) < r.radius + p.radius) r.handleContact(this);
     }
     this.updateJensen(dt);
+    this.updateSwarm(dt);
     this.updateNews(dt);
     this.updateLeader();
 
@@ -1159,6 +1179,58 @@ export class Game implements RivalWorld, JensenWorld {
     let pos = this.randomFreePos(160, 380);
     for (let i = 0; i < 20 && this.civilians.some((c) => dist(c.pos, pos) < 500); i++) pos = this.randomFreePos(160, 380);
     this.civilians.push(new Civilian(pos));
+  }
+
+  // -------------------------------------------------------------------------
+  // Chinese Labs: models drop in out of nowhere
+  // -------------------------------------------------------------------------
+
+  /** One model in Series A, one more each series: they arrive one at a time, with no warning. */
+  private updateSwarm(dt: number): void {
+    if (this.flock.length >= swarmSize(this.level)) return;
+    this.swarmTimer -= dt;
+    if (this.swarmTimer > 0) return;
+    this.swarmTimer = rand(...SWARM_INTERVAL);
+    this.dropModel();
+  }
+
+  /**
+   * A new Chinese model drops out of nowhere, close to Sam and preferably in his path.
+   * Public so it can be tried from the dev console: `game.dropModel()`.
+   */
+  dropModel(): void {
+    if (this.state !== 'playing') return;
+    const p = this.player;
+    const moving = length(p.vel) > 20;
+    const heading = Math.atan2(p.vel.y, p.vel.x);
+    const m = 40;
+    let pos: Vec | null = null;
+    for (let i = 0; i < 24 && !pos; i++) {
+      const a = moving && i < 12 ? heading + rand(-1, 1) : rand(0, TAU);
+      const d = rand(...SWARM_DROP_DIST);
+      const c = { x: p.pos.x + Math.cos(a) * d, y: p.pos.y + Math.sin(a) * d };
+      if (c.x < m || c.x > WORLD_W - m || c.y < m || c.y > WORLD_H - m) continue;
+      if (this.water.some((w) => w.contains(c, 20))) continue;
+      pos = c;
+    }
+    pos ??= { x: clamp(p.pos.x + SWARM_DROP_DIST[0], m, WORLD_W - m), y: clamp(p.pos.y, m, WORLD_H - m) };
+
+    const name = SWARM_NAMES[this.flock.length % SWARM_NAMES.length] ?? 'DeepSeek';
+    const bot = new SwarmBot(this.teams.china, name, pos, this.flock);
+    bot.contactCooldown = 1; // no distilling the instant it lands
+    this.rivals.push(bot);
+
+    const { x, y } = pos;
+    this.fx.beam(x, y, '#ff4d5e');
+    this.fx.burst(x, y, '#ff4d5e', 24, 220, 3, 0.6);
+    this.fx.burst(x, y, '#ffd23f', 12, 140, 2.5, 0.5);
+    this.fx.ring(x, y, '#ff4d5e', 70, 0.5, 4);
+    this.fx.text(x, y - 44, 'NEW MODEL DROPPED!', '#ff4d5e', 11);
+    this.screenFx.flash('#ff4d5e', 0.1, 0.25);
+    this.shake = Math.max(this.shake, 4);
+    this.sfx.modelDrop();
+    bot.say(pick(DROP_LINES), 2);
+    this.news.report(Headlines.modelDrop(name), 'drop', 0);
   }
 
   // -------------------------------------------------------------------------

@@ -972,8 +972,14 @@ function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number
   ctx.fill();
 }
 
-/** Places each rival in its own corner of the map. */
-export function spawnRivals(teams: Teams): Rival[] {
+/** The Chinese Labs' models, in the order they drop. */
+export const SWARM_NAMES = ['DeepSeek', 'Qwen', 'Kimi', 'GLM', 'MiniMax'] as const;
+
+/**
+ * Places each rival in its own corner of the map, with `bots` Chinese Labs models in the last one.
+ * In a game the labs start with none: their models drop in later (see `SwarmBot`).
+ */
+export function spawnRivals(teams: Teams, bots = 3): Rival[] {
   const m = 260;
   const [a, b, c, d] = shuffle<Vec>([
     { x: m, y: m },
@@ -982,12 +988,11 @@ export function spawnRivals(teams: Teams): Rival[] {
     { x: WORLD_W - m, y: WORLD_H - m },
   ]) as [Vec, Vec, Vec, Vec];
   const flock: SwarmBot[] = [];
-  return [
-    new Dario(teams.dario, a),
-    new Elon(teams.elon, b),
-    new Gemini(teams.gemini, c),
-    new SwarmBot(teams.china, 'DeepSeek', { x: d.x - 30, y: d.y }, flock),
-    new SwarmBot(teams.china, 'Qwen', { x: d.x + 30, y: d.y }, flock),
-    new SwarmBot(teams.china, 'Kimi', { x: d.x, y: d.y + 30 }, flock),
-  ];
+  const rivals: Rival[] = [new Dario(teams.dario, a), new Elon(teams.elon, b), new Gemini(teams.gemini, c)];
+  for (let i = 0; i < bots; i++) {
+    const angle = (i * TAU) / Math.max(1, bots) + Math.PI;
+    const name = SWARM_NAMES[i % SWARM_NAMES.length] ?? 'DeepSeek';
+    rivals.push(new SwarmBot(teams.china, name, { x: d.x + Math.cos(angle) * 30, y: d.y + Math.sin(angle) * 30 }, flock));
+  }
+  return rivals;
 }
