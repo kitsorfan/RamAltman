@@ -4,12 +4,14 @@ import {
   SHOVE_ACTIVE,
   SHOVE_COOLDOWN,
   SHOVE_LUNGE,
+  SOLAR_SETUP,
   SPRINT_MULT,
   WORLD_H,
   WORLD_W,
 } from '../config';
 import { clamp, lerp, normalize, vec, type Vec } from '../math';
 import { TAU, dot, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, uiFont, type ChibiStyle } from '../render/draw';
+import { drawPanels } from '../render/solar';
 
 const ZERO: Vec = { x: 0, y: 0 };
 const TWEET_SHOW = 2.6;
@@ -44,6 +46,10 @@ export class Player {
   tweetCooldown = 0;
   /** Seconds left standing around holding a box after the board fired him. Can't move or act. */
   fired = 0;
+  /** Solar panels are out: Sam stands in the sun and slowly recharges. Moving packs them away. */
+  solarOut = false;
+  /** Seconds since the panels came out. They unfold first, then charge. */
+  solarTime = 0;
   t = 0;
   private shoveAnim = 0;
   private speech: string | null = null;
@@ -59,6 +65,22 @@ export class Player {
     return this.tweetCooldown <= 0 && this.fired <= 0;
   }
 
+  /** The panels are unfolded and soaking up sun. */
+  get charging(): boolean {
+    return this.solarOut && this.solarTime >= SOLAR_SETUP;
+  }
+
+  deploySolar(): void {
+    this.solarOut = true;
+    this.solarTime = 0;
+    this.sprinting = false;
+  }
+
+  packSolar(): void {
+    this.solarOut = false;
+    this.solarTime = 0;
+  }
+
   /** Post something vague. Shows as a little tweet card above Sam. */
   tweet(text: string, cooldown: number): void {
     this.tweetText = text;
@@ -72,6 +94,7 @@ export class Player {
     this.fired = time;
     this.shoveActive = 0;
     this.sprinting = false;
+    this.packSolar();
   }
 
   /** Lunge forward with a punch. */
@@ -100,6 +123,7 @@ export class Player {
     this.shoveAnim = 0;
     this.tweetCooldown = 0;
     this.fired = 0;
+    this.packSolar();
     this.speech = null;
     this.tweetText = null;
   }
@@ -126,6 +150,7 @@ export class Player {
     this.animate(dt);
     const axis = this.fired > 0 ? ZERO : input;
     this.fired = Math.max(0, this.fired - dt);
+    if (this.solarOut) this.solarTime += dt;
     this.tweetCooldown = Math.max(0, this.tweetCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
     this.shoveCooldown = Math.max(0, this.shoveCooldown - dt);
@@ -186,6 +211,8 @@ export class Player {
       ctx.ellipse(x, y + this.radius * 0.95, this.radius * 1.1, this.radius * 0.45, 0, -Math.PI / 2, -Math.PI / 2 + TAU * k);
       ctx.stroke();
     }
+
+    if (this.solarOut) drawPanels(ctx, x, y, this.solarTime, time);
 
     const bob = this.moving ? Math.sin(this.t * (this.sprinting ? 22 : 14)) * 1.8 : Math.sin(time * 2) * 0.6;
     drawChibi(ctx, x, y, this.radius, SAM_STYLE, this.look, bob);

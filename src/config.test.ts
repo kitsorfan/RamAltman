@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { RAM_SPAWN_INTERVAL, bubbleDuration, levelTarget, ramOnField, seriesName, swarmSize, waterCount } from './config';
+import {
+  ENERGY_POWER,
+  RAM_SPAWN_INTERVAL,
+  SOLAR_BELOW,
+  SOLAR_MAX,
+  bubbleDuration,
+  levelTarget,
+  ramOnField,
+  seriesName,
+  swarmSize,
+  waterCount,
+} from './config';
 
 describe('level tuning', () => {
   it('names levels after funding rounds', () => {
@@ -42,5 +53,12 @@ describe('Chinese Labs', () => {
   it('stop growing at five models', () => {
     expect(swarmSize(5)).toBe(5);
     expect(swarmSize(40)).toBe(5);
+  });
+});
+
+describe('solar panels', () => {
+  it('charge past the point where they unlock, but leave energy cells worth grabbing', () => {
+    expect(SOLAR_MAX).toBeGreaterThan(SOLAR_BELOW);
+    expect(SOLAR_MAX + ENERGY_POWER).toBeLessThanOrEqual(100);
   });
 });

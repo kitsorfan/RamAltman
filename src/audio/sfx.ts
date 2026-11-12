@@ -170,6 +170,18 @@ export class Sfx {
     this.tone(180, 0.25, { type: 'sawtooth', slide: 900, vol: 0.08, delay: 0.1 });
   }
 
+  /** Panels click open and the sun comes up: a warm rising chord. */
+  solar(): void {
+    [0, 0.08, 0.16].forEach((d) => this.noise(0.04, 0.14, 6000, d));
+    [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.3, { type: 'sine', vol: 0.09, delay: 0.25 + i * 0.07, sustain: 0.4 }));
+  }
+
+  /** Panels snap shut. */
+  solarPack(): void {
+    this.noise(0.05, 0.16, 5000);
+    this.tone(700, 0.12, { type: 'triangle', slide: 300, vol: 0.08, delay: 0.04 });
+  }
+
   /** Something heavy lands in the sand. */
   thud(): void {
     this.noise(0.12, 0.2, 600);

@@ -80,6 +80,7 @@ test('survives a burst of frantic play', async ({ page }) => {
     await page.keyboard.press('Space'); // shove
     if (i % 5 === 0) await page.keyboard.press('KeyE'); // sonar
     if (i % 4 === 0) await page.keyboard.press('KeyT'); // hype tweet
+    if (i % 6 === 0) await page.keyboard.press('KeyR'); // solar panels
     await page.waitForTimeout(250);
     await page.keyboard.up('ShiftLeft');
     await page.keyboard.up(key);

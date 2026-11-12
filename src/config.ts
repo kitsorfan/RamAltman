@@ -46,6 +46,14 @@ export const ENERGY_POWER = 30; // per energy cell
 export const ENERGY_ON_FIELD = 5;
 export const ENERGY_SPAWN_INTERVAL = 4;
 
+// Solar panels: when energy runs low, R unfolds them and the sun slowly recharges Sam.
+// The price: he has to stand still in the desert sun (it heats him up), and a bump from a rival packs them away.
+export const SOLAR_BELOW = 30; // panels only come out when energy is under this
+export const SOLAR_SETUP = 0.6; // seconds to unfold before they charge
+export const SOLAR_RATE = 7; // energy per second while charging (in place of the usual drain)
+export const SOLAR_MAX = 60; // the sun only gets you this far; energy cells do the rest
+export const SOLAR_HEAT = 3; // extra heat per second while standing in the sun
+
 // Water sources dry up as you use them, then reappear somewhere else.
 export const WATER_CAPACITY = 100;
 export const WATER_DRAIN = 20;

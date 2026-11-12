@@ -1,4 +1,4 @@
-import { COMBO_WINDOW, VIEW_H, VIEW_W, WORLD_H, WORLD_W, seriesName } from '../config';
+import { COMBO_WINDOW, SOLAR_MAX, VIEW_H, VIEW_W, WORLD_H, WORLD_W, seriesName } from '../config';
 import type { Rival, Team } from '../entities/rivals';
 import type { WaterSource } from '../entities/water';
 import { clamp, type Vec } from '../math';
@@ -31,7 +31,11 @@ export interface HudData {
   news: NewsView;
   /** Hype tweet recharge, 0 (just posted) to 1 (ready). */
   tweetReady: number;
+  solar: SolarState;
 }
+
+/** The solar panels: not needed yet, ready (energy is low), unfolding, or charging. */
+export type SolarState = 'locked' | 'ready' | 'unfolding' | 'charging';
 
 /** The ticker under the bubble meter: a headline, or a breaking story in progress. */
 export interface NewsView {
@@ -120,6 +124,7 @@ function meter(
 export function drawHud(ctx: CanvasRenderingContext2D, d: HudData): void {
   drawStatusPanel(ctx, d);
   drawTweetChip(ctx, d);
+  drawSolarChip(ctx, d);
   drawBubbleMeter(ctx, d);
   drawNews(ctx, d);
   drawLeaderboard(ctx, d);
@@ -130,7 +135,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, d: HudData): void {
   ctx.textBaseline = 'alphabetic';
   outlinedText(
     ctx,
-    `WASD move · SHIFT sprint · SPACE shove · E sonar · T tweet · P pause · M ${d.muted ? 'unmute' : 'mute'} · N music ${d.musicOn ? 'off' : 'on'}`,
+    `WASD move · SHIFT sprint · SPACE shove · E sonar · T tweet · R solar · P pause · M ${d.muted ? 'unmute' : 'mute'} · N music ${d.musicOn ? 'off' : 'on'}`,
     VIEW_W - 14,
     VIEW_H - 14,
     'rgba(255, 255, 255, 0.8)',
@@ -172,6 +177,12 @@ function drawStatusPanel(ctx: CanvasRenderingContext2D, d: HudData): void {
   meter(ctx, x + 12, HUD_RAM_BAR.y, BAR_W, 11, d.ram / d.target, '#5dff9a', 'RAM', false, `${d.ram}/${d.target}`);
   barGlow(ctx, HUD_ENERGY_BAR, d.energyPulse, '255, 233, 77');
   barGlow(ctx, HUD_RAM_BAR, d.ramPulse, '93, 255, 154');
+  if (d.solar === 'unfolding' || d.solar === 'charging') {
+    // How far the sun will take you.
+    const mx = HUD_ENERGY_BAR.x + HUD_ENERGY_BAR.w * (SOLAR_MAX / 100);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(mx - 1, HUD_ENERGY_BAR.y - 3, 2, HUD_ENERGY_BAR.h + 6);
+  }
 }
 
 /** Flash around a bar when a pickup lands in it. */
@@ -190,24 +201,34 @@ function barGlow(
   ctx.stroke();
 }
 
-/** Under the status panel: is the hype tweet ready yet? */
-function drawTweetChip(ctx: CanvasRenderingContext2D, d: HudData): void {
+interface Chip {
+  key: string;
+  label: string;
+  /** How full the chip is, 0 to 1. */
+  fill: number;
+  /** Bright and pulsing: you can use it right now. */
+  ready: boolean;
+  /** Fill color as "r, g, b". */
+  rgb: string;
+  /** Label color when ready. */
+  color: string;
+}
+
+/** A small key + label chip under the status panel, filling up as an ability recharges. */
+function drawChip(ctx: CanvasRenderingContext2D, y: number, c: Chip, time: number): void {
   const x = PANEL_X;
-  const y = PANEL_Y + 134;
   const w = 150;
   const h = 22;
-  const f = clamp(d.tweetReady, 0, 1);
-  const ready = f >= 1;
   panel(ctx, x, y, w, h);
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 10);
   ctx.clip();
-  ctx.fillStyle = ready ? `rgba(79, 184, 255, ${0.3 + 0.12 * Math.sin(d.time * 5)})` : 'rgba(79, 184, 255, 0.16)';
-  ctx.fillRect(x, y, w * f, h);
+  ctx.fillStyle = c.ready ? `rgba(${c.rgb}, ${0.3 + 0.12 * Math.sin(time * 5)})` : `rgba(${c.rgb}, 0.16)`;
+  ctx.fillRect(x, y, w * clamp(c.fill, 0, 1), h);
   ctx.restore();
 
-  ctx.fillStyle = ready ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+  ctx.fillStyle = c.ready ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
   ctx.beginPath();
   ctx.roundRect(x + 6, y + 4, 14, 14, 3);
   ctx.fill();
@@ -215,10 +236,40 @@ function drawTweetChip(ctx: CanvasRenderingContext2D, d: HudData): void {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2a0f3d';
-  ctx.fillText('T', x + 13, y + 12);
+  ctx.fillText(c.key, x + 13, y + 12);
   ctx.textAlign = 'left';
-  ctx.fillStyle = ready ? '#bfeaff' : '#8d86ad';
-  ctx.fillText(ready ? 'HYPE TWEET' : 'DRAFTING…', x + 28, y + 12);
+  ctx.fillStyle = c.ready ? c.color : '#8d86ad';
+  ctx.fillText(c.label, x + 28, y + 12);
+}
+
+/** Under the status panel: is the hype tweet ready yet? */
+function drawTweetChip(ctx: CanvasRenderingContext2D, d: HudData): void {
+  const ready = d.tweetReady >= 1;
+  drawChip(
+    ctx,
+    PANEL_Y + 134,
+    { key: 'T', label: ready ? 'HYPE TWEET' : 'DRAFTING…', fill: d.tweetReady, ready, rgb: '79, 184, 255', color: '#bfeaff' },
+    d.time,
+  );
+}
+
+const SOLAR_LABELS: Readonly<Record<SolarState, string>> = {
+  locked: 'SOLAR PANELS',
+  ready: 'SOLAR READY!',
+  unfolding: 'UNFOLDING…',
+  charging: 'CHARGING…',
+};
+
+/** Under the tweet chip: the solar panels light up once energy runs low, then fill toward the sun's limit. */
+function drawSolarChip(ctx: CanvasRenderingContext2D, d: HudData): void {
+  const s = d.solar;
+  const fill = s === 'locked' ? 0 : s === 'ready' ? 1 : d.power / SOLAR_MAX;
+  drawChip(
+    ctx,
+    PANEL_Y + 162,
+    { key: 'R', label: SOLAR_LABELS[s], fill, ready: s !== 'locked', rgb: '255, 201, 60', color: '#ffe08a' },
+    d.time,
+  );
 }
 
 const TICKER_W = 400;

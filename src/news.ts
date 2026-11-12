@@ -122,6 +122,8 @@ export const Headlines = {
   tweet: (text: string): string => `Sam tweets "${text}". Bubble inflates.`,
   modelDrop: (name: string): string =>
     pick([`${name} drops out of nowhere, matches the frontier`, `${name} released overnight for $5M. Markets confused.`, `Surprise: ${name} is out, and it's open weights`]),
+  solar: (): string =>
+    pick(['Sam goes solar, calls it "sustainable AGI"', 'Sam to power AGI with "the big lamp in the sky"', "Elon claims credit for Sam's solar panels"]),
   bubbleDanger: (): string => pick(['Analysts: "This is definitely NOT a bubble"', 'Experts agree bubble will "probably" hold']),
 } as const;
 

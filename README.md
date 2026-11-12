@@ -15,6 +15,7 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 | Space (or J) | Shove the rival in front of you |
 | E (or Q) | Sonar ping: reveals the nearest water and points an arrow at it |
 | T | Hype tweet: nearby rivals stop to read it |
+| R | Solar panels when energy is low (stand still; R again or walking off packs them) |
 | Y (or Enter) | Take Jensen's loan when he offers one (or click the button) |
 | X | Turn the loan down |
 | P / Esc | Pause |
@@ -25,6 +26,7 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 - **GPUs** are worth 1,000 points each, but they add heat.
 - **Heat** rises constantly. Stand in **water** to cool down. Each oasis shrinks as you use it, dries up, and reappears somewhere else. At 100 heat you lose one of your 3 lives, and the board fires you: Sam stands there holding a cardboard box (plant included) for a moment, then gets rehired.
 - **Energy** drains constantly and shrinks how far you can see. Refill it from the glowing yellow **energy cells**, which rivals also grab for a speed boost.
+- **Solar panels** (R): once energy drops below 30, stand still and press R. Two panels unfold, a sun in shades comes up, and Sam slowly recharges (7 energy a second, up to 60). It costs you: you're standing still in the desert sun, so heat rises faster, and walking off, shoving, or a bump from a rival packs the panels away. Past 60 you still need a real energy cell.
 - **Shoving** a rival stuns them and knocks 2 of their RAM loose. It costs you: 8 energy and some heat per shove, a 1-second cooldown, a bubble jump from **bad press**, and a **furious** rival who hunts you down to steal RAM back. Hit one Chinese Labs bot and the whole swarm comes for you.
 - **Hype tweets** (T): Sam vague-posts something like "something big is coming". Every rival within range stops to read it for about 2.4 seconds, so you can slip past Elon's dash or grab what they were going for. It costs you: hype is what inflates bubbles (+4% bubble per tweet), and you have to wait 14 seconds to post again.
 - **People with idle RAM** sit out in the desert next to glowing PCs. Their idle RAM is "quite terrible", so stand next to one for about 1.5 seconds and Sam pools it to the cloud (2–3 RAM each). It costs you: you have to stay put while it uploads (step away and it stalls), and every take is a headline that inflates the bubble. Someone new shows up a while later.
@@ -80,7 +82,7 @@ In dev mode only, the game is exposed as `window.game` for console tinkering (fo
 
 ### Testing
 
-- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, getting fired, HUD effects, and high-score storage validation.
+- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, solar panels, getting fired, HUD effects, and high-score storage validation.
 - **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab.
 
 The end-to-end tests use Playwright's Chromium. Install it once with `npx playwright install chromium`, or use a browser you already have, e.g. `PW_CHANNEL=msedge npm run test:e2e`.
@@ -99,7 +101,7 @@ src/
   audio/             WebAudio engine, sound effects, procedural soundtrack
   entities/          player (Sam), rivals, Jensen, people with idle RAM, pickups, water
   fx/                world effects (particles, beams, footprints) and screen effects (flashes, HUD flyers)
-  render/            title screen, HUD, overlays, Jensen's loan pop-up, background, drawing helpers
+  render/            title screen, HUD, overlays, Jensen's loan pop-up, solar panels and sun, background, drawing helpers
 e2e/                 Playwright end-to-end tests
 .github/             CI/CD workflow and Dependabot config
 ```

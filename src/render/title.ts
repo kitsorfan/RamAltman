@@ -45,6 +45,7 @@ const HEADLINES = [
   'Board fires Sam, rehires him before lunch',
   'Dario hosts AI Safety Summit; Elon not invited',
   'Forecast: scattered RAM showers over the desert',
+  'Sam unveils solar-powered AGI; the sun now wears shades',
   'RAM ALTMAN was created by www.kitsorfan.com',
   'Disclaimer: RAM ALTMAN is a parody, not affiliated with any company or person in it',
 ] as const;
@@ -62,6 +63,7 @@ const CONTROLS: ReadonlyArray<{ keys: readonly string[]; label: string }> = [
   { keys: ['SPACE'], label: 'Shove' },
   { keys: ['E'], label: 'Sonar' },
   { keys: ['T'], label: 'Tweet' },
+  { keys: ['R'], label: 'Solar' },
   { keys: ['P'], label: 'Pause' },
   { keys: ['M'], label: 'Mute' },
   { keys: ['N'], label: 'Music' },
@@ -551,7 +553,7 @@ export class TitleScreen {
     ctx.font = uiFont(14, 700);
     outlinedText(
       ctx,
-      'Grab RAM  ·  Take idle RAM from people  ·  Cool off in WATER  ·  Refill ENERGY  ·  Shoves and tweets cost you',
+      'Grab RAM  ·  Take idle RAM from people  ·  Cool off in WATER  ·  Refill ENERGY or go solar  ·  Shoves and tweets cost you',
       VIEW_W / 2,
       368,
       '#ffe9f5',

@@ -43,6 +43,10 @@ import {
   SHOVE_HEAT,
   SHOVE_POINTS,
   SHOVE_RANGE,
+  SOLAR_BELOW,
+  SOLAR_HEAT,
+  SOLAR_MAX,
+  SOLAR_RATE,
   START_LIVES,
   SWARM_DROP_DIST,
   SWARM_FIRST,
@@ -97,6 +101,7 @@ import {
   type LevelClearInfo,
 } from './render/overlays';
 import { drawLoanOffer, offerButtonAt } from './render/offer';
+import { PANEL_OFFSETS, drawSun } from './render/solar';
 import { TitleScreen } from './render/title';
 import { loadHighScore, saveHighScore } from './storage';
 import { ScreenFx } from './fx/screen-fx';
@@ -140,7 +145,8 @@ const START_LINES = ["Let's raise another round!", 'AGI is near. RAM is nearer.'
 const GPU_LINES = ['We need $7 trillion more.', 'Feel the AGI!', 'More compute!', 'Scaling laws, baby.'] as const;
 const WATER_LINES = ['Ahh, liquid cooling.', 'Hydrating the cluster.', 'Water-cooled AGI.'] as const;
 const ENERGY_LINES = ['Fusion would be nice.', 'Charging up!', 'More power!'] as const;
-const DROP_LINES = ['Surprise!', 'Open weights!', 'Trained for $5M!', 'Hello from nowhere!'] as const;
+const SOLAR_LINES = ['Sustainable AGI!', 'Free energy, baby.', 'Powered by the big lamp in the sky.', 'Fusion is late. Sun it is.'] as const;
+const DROP_LINES =['Surprise!', 'Open weights!', 'Trained for $5M!', 'Hello from nowhere!'] as const;
 const POOL_LINES = [
   'Idle RAM is quite terrible.',
   "I'm pooling it to the cloud.",
@@ -220,6 +226,10 @@ export class Game implements RivalWorld, JensenWorld {
   /** The Chinese Labs models on the field this level (they drop in over time). */
   private flock: SwarmBot[] = [];
   private swarmTimer = 0;
+  /** Counts down to the next "+energy" tick while the solar panels charge. */
+  private solarTick = 0;
+  /** Has the player found the solar panels this game? Until then, low energy shows a hint about them. */
+  private solarTaught = false;
   private readonly hitThisShove = new Set<Rival>();
   /** People out in the desert with idle RAM in their PCs. */
   private civilians: Civilian[] = [];
@@ -392,6 +402,7 @@ export class Game implements RivalWorld, JensenWorld {
   private newGame(): void {
     this.teams = createTeams();
     this.leaderId = null;
+    this.solarTaught = false;
     this.score = 0;
     this.level = 1;
     this.player.lives = START_LIVES;
@@ -523,7 +534,9 @@ export class Game implements RivalWorld, JensenWorld {
     const axis = this.input.axis();
     const hasPower = p.power > 0;
     const fired = p.fired > 0;
-    p.sprinting = this.input.isDown('ShiftLeft', 'ShiftRight') && hasPower && !fired && (axis.x !== 0 || axis.y !== 0);
+    const moving = axis.x !== 0 || axis.y !== 0;
+    if (p.solarOut && moving) this.packSolar(); // walking off packs the panels away
+    p.sprinting = this.input.isDown('ShiftLeft', 'ShiftRight') && hasPower && !fired && moving;
     p.update(dt, axis, hasPower ? 1 : LOW_POWER_MULT);
     if (fired && p.fired <= 0) this.rehire();
     this.trailEffects(dt);
@@ -532,6 +545,7 @@ export class Game implements RivalWorld, JensenWorld {
       if (this.input.wasPressed('Space', 'KeyJ')) this.tryShove();
       if (this.input.wasPressed('KeyE', 'KeyQ')) this.sonarPing();
       if (this.input.wasPressed('KeyT')) this.tryTweet();
+      if (this.input.wasPressed('KeyR')) this.toggleSolar(moving);
     }
     if (p.shoveActive > 0) this.checkShoveHits();
 
@@ -551,10 +565,12 @@ export class Game implements RivalWorld, JensenWorld {
       if (Math.random() < dt * 10) this.fx.burst(p.pos.x, p.pos.y + 8, '#bfefff', 2, 60, 2, 0.4);
     } else {
       const weather = this.news.isRunning('heatwave') ? HEATWAVE_MULT : 1;
-      p.heat += (HEAT_BASE + HEAT_PER_LEVEL * (this.level - 1) + (p.sprinting ? HEAT_SPRINT : 0)) * weather * dt;
+      const exertion = (p.sprinting ? HEAT_SPRINT : 0) + (p.charging ? SOLAR_HEAT : 0);
+      p.heat += (HEAT_BASE + HEAT_PER_LEVEL * (this.level - 1) + exertion) * weather * dt;
     }
-    // Energy always drains; refill it from energy cells.
-    p.power = Math.max(0, p.power - (POWER_DRAIN + (p.sprinting ? POWER_SPRINT : 0)) * dt);
+    // Energy always drains; refill it from energy cells, or slowly from the sun.
+    if (p.charging) this.chargeSolar(dt);
+    else p.power = Math.max(0, p.power - (POWER_DRAIN + (p.sprinting ? POWER_SPRINT : 0)) * dt);
 
     if (p.heat > 60 && Math.random() < (dt * (p.heat - 50)) / 4) this.fx.steam(p.pos.x, p.pos.y - 20);
     if (p.heat > 75 && !this.heatWarned) {
@@ -729,6 +745,7 @@ export class Game implements RivalWorld, JensenWorld {
       return;
     }
     // Every shove costs energy and heat, hit or miss.
+    this.packSolar();
     p.power -= SHOVE_ENERGY;
     p.heat += SHOVE_HEAT;
     p.startShove();
@@ -916,6 +933,72 @@ export class Game implements RivalWorld, JensenWorld {
     }
     this.sfx.tweet();
     this.news.report(Headlines.tweet(text), 'tweet', 0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Solar panels
+  // -------------------------------------------------------------------------
+
+  /** R: unfold the panels when energy is low (standing still, on dry sand), or pack them away again. */
+  private toggleSolar(moving: boolean): void {
+    const p = this.player;
+    if (p.solarOut) {
+      this.packSolar();
+      return;
+    }
+    const problem = moving
+      ? 'Stand still to set up the panels.'
+      : p.inWater
+        ? "Panels and water don't mix."
+        : p.power >= SOLAR_BELOW
+          ? 'Plenty of energy. Save the sun for later.'
+          : null;
+    if (problem) {
+      this.sfx.denied();
+      p.say(problem, 1.6);
+      return;
+    }
+    p.deploySolar();
+    this.solarTaught = true;
+    this.solarTick = 1;
+    this.fx.burst(p.pos.x, p.pos.y + 14, 'rgba(190, 150, 90, 0.8)', 10, 110, 2.5, 0.4);
+    this.fx.text(p.pos.x, p.pos.y + 40, 'IN THE SUN: HEAT +', '#ffb347', 10);
+    this.sfx.solar();
+    p.say(pick(SOLAR_LINES), 2);
+    this.news.report(Headlines.solar(), 'solar', 20);
+    const elon = this.rivals.find((r) => r.team.id === 'elon' && !r.busy && dist(r.pos, p.pos) < 420);
+    elon?.say("Tesla Solar. You're welcome.", 2);
+  }
+
+  /** Slow energy from the sun, up to SOLAR_MAX. Past that (an energy cell got there first) the panels pack up. */
+  private chargeSolar(dt: number): void {
+    const p = this.player;
+    if (p.power >= SOLAR_MAX) {
+      this.packSolar('PANELS FULL');
+      p.say("That's all the sun gives. Find a real cell!", 2);
+      return;
+    }
+    p.power = Math.min(SOLAR_MAX, p.power + SOLAR_RATE * dt);
+    this.solarTick -= dt;
+    if (this.solarTick <= 0) {
+      this.solarTick = 1;
+      this.fx.text(p.pos.x + 26, p.pos.y - 12, `+${SOLAR_RATE}`, '#ffe94d', 9);
+      this.screenFx.energyPulse = 0.6;
+    }
+    if (Math.random() < dt * 10) {
+      const o = pick(PANEL_OFFSETS);
+      this.fx.fling({ x: p.pos.x + o.x, y: p.pos.y + o.y }, p.pos, '#ffe94d', 1);
+    }
+  }
+
+  /** Folds the panels away (if they're out), with a little puff and an optional note. */
+  private packSolar(note?: string): void {
+    const p = this.player;
+    if (!p.solarOut) return;
+    p.packSolar();
+    for (const o of PANEL_OFFSETS) this.fx.burst(p.pos.x + o.x, p.pos.y + o.y, '#7aa2ff', 6, 90, 2.5, 0.35);
+    if (note) this.fx.text(p.pos.x, p.pos.y + 40, note, '#ffe94d', 10);
+    this.sfx.solarPack();
   }
 
   // -------------------------------------------------------------------------
@@ -1132,6 +1215,7 @@ export class Game implements RivalWorld, JensenWorld {
     if (n.x === 0 && n.y === 0) n = { x: 1, y: 0 };
     p.knock.x = n.x * force;
     p.knock.y = n.y * force;
+    this.packSolar('PANELS KNOCKED OVER!');
     this.fx.burst(p.pos.x - n.x * 14, p.pos.y - n.y * 14, 'rgba(190, 150, 90, 0.8)', 8, 120, 3, 0.4);
     this.shake = Math.max(this.shake, force / 60);
     this.sfx.bump();
@@ -1473,6 +1557,7 @@ export class Game implements RivalWorld, JensenWorld {
           : null,
       },
       tweetReady: 1 - p.tweetCooldown / TWEET_COOLDOWN,
+      solar: p.charging ? 'charging' : p.solarOut ? 'unfolding' : p.power < SOLAR_BELOW ? 'ready' : 'locked',
     });
     drawMinimap(ctx, {
       player: p.pos,
@@ -1548,6 +1633,7 @@ export class Game implements RivalWorld, JensenWorld {
     }
     if (this.jensen && inView(this.jensen.pos, 300)) this.jensen.drawSpotlight(ctx, t);
     if (this.rain && inView(this.rain.pos, 400)) this.drawRainZone(this.rain, t);
+    if (p.solarOut) drawSun(ctx, p.pos.x, p.pos.y, p.solarTime, t);
     for (const c of this.civilians) if (inView(c.pos, 120)) c.drawSpeech(ctx);
     for (const r of this.rivals) if (inView(r.pos, 120)) r.drawSpeech(ctx);
     this.jensen?.drawSpeech(ctx);
@@ -1706,7 +1792,9 @@ export class Game implements RivalWorld, JensenWorld {
   private drawHints(): void {
     const p = this.player;
     let hint: string | null = null;
-    if (p.power <= 0) hint = 'Out of energy! Grab a yellow energy cell.';
+    if (p.solarOut && p.solarTime < 4) hint = 'Charging from the sun. It heats you up, though! Move to pack up.';
+    else if (p.power <= 0) hint = 'Out of energy! Press R for solar panels, or grab a yellow energy cell.';
+    else if (p.power < SOLAR_BELOW && !this.solarTaught) hint = 'Low energy! Stand still and press R for solar panels.';
     else if (p.heat > 50 && !p.inWater && !this.water.some((w) => w.discovered)) {
       hint = 'Overheating! Press E to sonar-ping for water.';
     } else if (this.level === 1 && this.levelTime > 3 && this.levelTime < 10) {

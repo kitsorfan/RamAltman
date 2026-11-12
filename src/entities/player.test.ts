@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIRED_TIME, PLAYER_SPEED, SHOVE_COOLDOWN, TWEET_COOLDOWN, WORLD_H, WORLD_W } from '../config';
+import { FIRED_TIME, PLAYER_SPEED, SHOVE_COOLDOWN, SOLAR_SETUP, TWEET_COOLDOWN, WORLD_H, WORLD_W } from '../config';
 import { Player } from './player';
 
 const STILL = { x: 0, y: 0 };
@@ -93,5 +93,29 @@ describe('hype tweet', () => {
     expect(p.canTweet).toBe(false);
     run(p, 1);
     expect(p.canTweet).toBe(true);
+  });
+});
+
+describe('solar panels', () => {
+  it('unfold first, then charge', () => {
+    const p = new Player();
+    p.deploySolar();
+    expect(p.solarOut).toBe(true);
+    expect(p.charging).toBe(false);
+    run(p, SOLAR_SETUP + 0.1);
+    expect(p.charging).toBe(true);
+    p.packSolar();
+    expect(p.solarOut).toBe(false);
+    expect(p.charging).toBe(false);
+  });
+
+  it('get packed away when the board fires Sam, and at the start of a level', () => {
+    const p = new Player();
+    p.deploySolar();
+    p.fire(FIRED_TIME);
+    expect(p.solarOut).toBe(false);
+    p.deploySolar();
+    p.reset();
+    expect(p.solarOut).toBe(false);
   });
 });
