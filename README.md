@@ -30,14 +30,14 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 - **Shoving** a rival stuns them and knocks 2 of their RAM loose. It costs you: 8 energy and some heat per shove, a 1-second cooldown, a bubble jump from **bad press**, and a **furious** rival who hunts you down to steal RAM back. Hit one Chinese Labs bot and the whole swarm comes for you.
 - **Hype tweets** (T): Sam vague-posts something like "something big is coming". Every rival within range stops to read it for about 2.4 seconds, so you can slip past Elon's dash or grab what they were going for. It costs you: hype is what inflates bubbles (+4% bubble per tweet), and you have to wait 14 seconds to post again.
 - **People with idle RAM** sit out in the desert next to glowing PCs. Their idle RAM is "quite terrible", so stand next to one for about 1.5 seconds and Sam pools it to the cloud (2–3 RAM each). It costs you: you have to stay put while it uploads (step away and it stalls), and every take is a headline that inflates the bubble. Someone new shows up a while later.
-- **Jensen** drops by about every 30 seconds. He isn't competing for RAM: he sells to everyone.
+- **Jensen** drops by about every 30 seconds (unless he's just stepped down: see breaking news). He isn't competing for RAM: he sells to everyone.
   - At a **keynote** ("The more you buy, the more you save!") he throws free GPUs around. Rivals race you for them. A green arrow points the way if he's out in the dark.
   - Or he pops up with a **loan**: "I will lend you the money to buy my chips!" Take it and he throws 3 GPUs at you, but it's a circular deal: the AI bubble jumps 8%, and the GPUs add heat. Say no, or let the 7-second offer expire, and a rival takes it instead.
 - Finish a series as #1 in market share for a +2,500 bonus.
 
 ### Breaking news
 
-Every 30 to 40 seconds a story breaks and changes the rules for a few seconds. The ticker under the bubble meter shows what it means and how long it lasts. The rest of the time it reports on what you're doing ("Sam shoves Dario, calls it 'alignment'").
+Every 30 to 40 seconds a story breaks and changes the rules for a few seconds. This week's two biggest stories break first: the spy, then Jensen stepping down. The ticker under the bubble meter shows what it means and how long it lasts. The rest of the time it reports on what you're doing ("Sam shoves Dario, calls it 'alignment'").
 
 | Story | What happens |
 | --- | --- |
@@ -46,6 +46,8 @@ Every 30 to 40 seconds a story breaks and changes the rules for a few seconds. T
 | Record heatwave | Heat rises 80% faster, but every oasis is refilled and shown on the map. |
 | Elon sues Sam | Elon flies in and hunts you down to serve the papers. Run, tweet, or shove him. |
 | AI Safety Summit | Dario gives a very long talk. Gemini and the labs go sit through it. Elon wasn't invited. |
+| Spy scandal | An alleged spy in a trench coat sneaks up behind you, but only while your back is turned. Face them and they freeze behind a newspaper; walk into them (or shove them) to catch them for +1,500. If they touch you from behind they copy 2 RAM and run: sprint after them to get it back, or it ends up with the Chinese Labs. China calls it "a smear". |
+| Jensen steps down | NVDA drops 4%, and the bubble with it. Jensen walks off with his cardboard box, dropping 5 GPUs on the way: follow the trail before the rivals do. He's off to testify, so no more keynotes or loans for the rest of the series. |
 
 ### Rivals
 
@@ -78,11 +80,11 @@ npm run dev          # open the printed localhost URL
 | `npm run test:e2e` | End-to-end tests with [Playwright](https://playwright.dev) against the production build |
 | `npm run check` | Lint, unit tests, type-check and build in one go |
 
-In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away, or `game.breakNews('rain')` to break a story: `rain`, `panic`, `heatwave`, `lawsuit` or `summit`, or `game.dropModel()` to drop in a Chinese Labs model). It is stripped from production builds.
+In dev mode only, the game is exposed as `window.game` for console tinkering (for example `game.player.ram = 11`, or `game.summonJensen('loan')` to call Jensen in right away, or `game.breakNews('rain')` to break a story: `rain`, `panic`, `heatwave`, `lawsuit`, `summit`, `spy` or `resign`, or `game.dropModel()` to drop in a Chinese Labs model). It is stripped from production builds.
 
 ### Testing
 
-- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote and loan visits, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, solar panels, getting fired, HUD effects, and high-score storage validation.
+- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote, loan and resignation visits, the alleged spy, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, solar panels, getting fired, HUD effects, and high-score storage validation.
 - **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab.
 
 The end-to-end tests use Playwright's Chromium. Install it once with `npx playwright install chromium`, or use a browser you already have, e.g. `PW_CHANNEL=msedge npm run test:e2e`.
@@ -99,7 +101,7 @@ src/
   storage.ts         validated high-score persistence
   news.ts            breaking-news stories, the headline ticker, tweets and headlines
   audio/             WebAudio engine, sound effects, procedural soundtrack
-  entities/          player (Sam), rivals, Jensen, people with idle RAM, pickups, water
+  entities/          player (Sam), rivals, Jensen, the alleged spy, people with idle RAM, pickups, water
   fx/                world effects (particles, beams, footprints) and screen effects (flashes, HUD flyers)
   render/            title screen, HUD, overlays, Jensen's loan pop-up, solar panels and sun, background, drawing helpers
 e2e/                 Playwright end-to-end tests

@@ -98,6 +98,64 @@ export function droplet(ctx: CanvasRenderingContext2D, x: number, y: number, s: 
   ctx.closePath();
 }
 
+/**
+ * The classic "clearing out my desk" cardboard box, held in both hands at chest height.
+ * Sam's (fired) has a desk plant poking out; Jensen's (stepping down) is full of GPUs.
+ */
+export function drawCardboardBox(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  time: number,
+  skin: string,
+  contents: 'plant' | 'gpus',
+): void {
+  const bx = x - 13;
+  const by = y + 4;
+  if (contents === 'plant') {
+    ctx.strokeStyle = '#3e7d32';
+    ctx.lineWidth = 2;
+    for (const [dx, lean] of [[5, -0.3], [8, 0.2], [11, 0.7]] as const) {
+      const sway = Math.sin(time * 3 + dx) * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x + dx, by + 2);
+      ctx.quadraticCurveTo(x + dx + lean * 3, by - 5, x + dx + lean * 6 + sway, by - 9);
+      ctx.stroke();
+    }
+  } else {
+    for (const [dx, tilt] of [[-6, -0.25], [4, 0.2]] as const) {
+      ctx.save();
+      ctx.translate(x + dx, by - 1);
+      ctx.rotate(tilt + Math.sin(time * 5 + dx) * 0.04);
+      ctx.fillStyle = '#2b2f3a';
+      ctx.strokeStyle = '#9be15d';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.roundRect(-6, -7, 12, 8, 1.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#151820';
+      dot(ctx, -2.5, -3, 2);
+      dot(ctx, 2.5, -3, 2);
+      ctx.restore();
+    }
+  }
+  ctx.fillStyle = '#c99a5b';
+  ctx.strokeStyle = '#7a5530';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, 26, 15, 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bx + 3, by + 4);
+  ctx.lineTo(bx + 23, by + 4);
+  ctx.stroke();
+  ctx.fillStyle = skin;
+  dot(ctx, bx + 1, by + 8, 3.5);
+  dot(ctx, bx + 25, by + 8, 3.5);
+}
+
 export interface ChibiStyle {
   body: string;
   trim: string;

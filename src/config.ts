@@ -103,6 +103,21 @@ export const HEATWAVE_MULT = 1.8;
 export const PANIC_BUBBLE = 0.06; // a DeepSeek moment lets some air out of the bubble
 export const LAWSUIT_FURY = 9;
 
+// Jensen steps down: he walks off with his box, dropping GPUs as he goes. NVDA dips, and the
+// bubble with it. He's off to testify, so no more keynotes or loans for the rest of the series.
+export const RESIGN_GPUS = 5;
+export const RESIGN_BUBBLE = 0.04;
+
+// An alleged spy sneaks up behind Sam, but only while his back is turned. Face them and they freeze;
+// walk into them to catch them. Touched from behind, Sam loses RAM, and has to sprint to get it back.
+export const SPY_SNEAK_SPEED = 235; // a little faster than Sam walks, so walking away doesn't lose them
+export const SPY_FLEE_SPEED = 275; // slower than Sam's sprint
+export const SPY_FREEZE_DOT = 0.34; // Sam sees them within about 70 degrees of where he's facing
+export const SPY_STEAL = 2;
+export const SPY_BOUNTY = 1500;
+export const SPY_ESCAPE_DIST = 560;
+export const SPY_FLEE_TIME = 7;
+
 // Scoring.
 export const COMBO_WINDOW = 2.5;
 export const COMBO_MAX = 8;

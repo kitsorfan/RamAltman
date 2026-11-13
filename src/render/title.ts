@@ -38,6 +38,8 @@ const HEADLINES = [
   'Grandma reports her 8 GB "pooled to the cloud" by a man in a grey sweater',
   'Jensen offers to lend everyone the money to buy his chips',
   'Leather jacket futures soar after surprise keynote',
+  'Jensen steps down amid spy probe; GPUs left on his desk "free to a good home"',
+  'Alleged spy spotted in the desert, says they are "just a consultant"',
   'Desert data center runs out of water, again',
   'Local man trades house for 16 GB of DDR5',
   'VCs launch new fund to fund the funds that fund AI',
@@ -72,6 +74,8 @@ const CONTROLS: ReadonlyArray<{ keys: readonly string[]; label: string }> = [
 const SAM_LINES = ['We need more RAM!', '$7 trillion, please!', 'Feel the AGI!', "It's NOT a bubble!"] as const;
 const JENSEN_KEYNOTE_LINES = ['The more you buy, the more you save!', 'Who wants a GPU?'] as const;
 const JENSEN_TOSS_LINES = ['I will lend you the money to buy my chips!', 'Free GPUs! Catch!'] as const;
+const JENSEN_RESIGN_LINES = ["I'm stepping down!", 'Effective immediately!'] as const;
+const JENSEN_FAREWELL_LINES = ['Keep the GPUs!', 'See you in Congress!'] as const;
 const JENSEN_Y = 526;
 const JENSEN_SHOW = 3.6;
 const KINDS: readonly PickupKind[] = ['ram', 'ram', 'ram', 'gpu', 'energy'];
@@ -102,6 +106,8 @@ export class TitleScreen {
   private jensenTimer = 3.5;
   private jensenShow = 0;
   private jensenTossed = false;
+  /** Every other appearance he's stepping down: same GPUs, but out of a cardboard box. */
+  private jensenResigning = false;
   private time = 0;
   private bubbleT = 0;
   private popCooldown = 0;
@@ -238,7 +244,7 @@ export class TitleScreen {
     }
   }
 
-  /** Beam in on the dunes, hold a GPU up, throw a handful, pitch a loan, beam out. */
+  /** Beam in on the dunes, hold a GPU up (or carry his box out), throw a handful, beam out. */
   private updateJensen(dt: number): void {
     const j = this.jensen;
     j.animate(dt);
@@ -248,8 +254,10 @@ export class TitleScreen {
       // Off to one side, clear of the centered start button.
       j.pos.x = Math.random() < 0.5 ? rand(170, 260) : rand(700, 790);
       j.pos.y = JENSEN_Y;
-      j.holding = true;
-      j.say(pick(JENSEN_KEYNOTE_LINES), 1.4);
+      this.jensenResigning = !this.jensenResigning;
+      j.holding = !this.jensenResigning;
+      j.carrying = this.jensenResigning;
+      j.say(pick(this.jensenResigning ? JENSEN_RESIGN_LINES : JENSEN_KEYNOTE_LINES), 1.4);
       this.jensenShow = JENSEN_SHOW;
       this.jensenTossed = false;
       this.fx.beam(j.pos.x, j.pos.y, JENSEN_COLOR);
@@ -261,7 +269,8 @@ export class TitleScreen {
     if (!this.jensenTossed && this.jensenShow < JENSEN_SHOW - 1.4) {
       this.jensenTossed = true;
       j.holding = false;
-      j.say(pick(JENSEN_TOSS_LINES), 2);
+      j.carrying = false;
+      j.say(pick(this.jensenResigning ? JENSEN_FAREWELL_LINES : JENSEN_TOSS_LINES), 2);
       const away = j.pos.x < VIEW_W / 2 ? -1 : 1; // throw outward, away from the start button
       for (let i = 0; i < 4; i++) {
         this.tossed.push({

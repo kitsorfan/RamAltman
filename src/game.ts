@@ -34,6 +34,7 @@ import {
   POWER_DRAIN,
   POWER_SPRINT,
   RAIN_RAM,
+  RESIGN_BUBBLE,
   RAM_POINTS,
   RAM_SPAWN_INTERVAL,
   SHOVE_ARC,
@@ -43,6 +44,8 @@ import {
   SHOVE_HEAT,
   SHOVE_POINTS,
   SHOVE_RANGE,
+  SPY_BOUNTY,
+  SPY_STEAL,
   SOLAR_BELOW,
   SOLAR_HEAT,
   SOLAR_MAX,
@@ -72,6 +75,7 @@ import {
 } from './config';
 import { Effects } from './fx/effects';
 import { Civilian } from './entities/civilian';
+import { SPY_COLOR, Spy } from './entities/spy';
 import { JENSEN_COLOR, Jensen, type JensenVisit, type JensenWorld } from './entities/jensen';
 import { Pickup, type PickupKind } from './entities/pickup';
 import { Player } from './entities/player';
@@ -87,7 +91,7 @@ import {
 } from './entities/rivals';
 import { WaterSource } from './entities/water';
 import type { Input } from './input';
-import { clamp, dist, length, lerp, normalize, pick, rand, sub, vec, type Vec } from './math';
+import { clamp, dist, length, lerp, normalize, pick, rand, scale, sub, vec, type Vec } from './math';
 import type { Music } from './audio/music';
 import { Background } from './render/background';
 import { TAU, outlinedText, pixelFont, uiFont } from './render/draw';
@@ -110,6 +114,7 @@ import {
   NewsDesk,
   PANIC_LINES,
   STORIES,
+  SPY_DENIALS,
   SUMMIT_LECTURE,
   SUMMIT_LINES,
   TWEETS,
@@ -126,6 +131,9 @@ interface Timed {
   time: number;
   color?: string;
 }
+
+/** The visits Jensen makes on his own schedule (stepping down only happens as breaking news). */
+type DropInVisit = Exclude<JensenVisit, 'resign'>;
 
 interface LoanOffer {
   title: string;
@@ -236,7 +244,11 @@ export class Game implements RivalWorld, JensenWorld {
   private civilianQueue: number[] = [];
   private jensen: Jensen | null = null;
   private jensenTimer = 0;
-  private nextVisit: JensenVisit = 'giveaway';
+  private nextVisit: DropInVisit = 'giveaway';
+  /** Jensen stepped down this series (he's off testifying): no more keynotes or loans until the next one. */
+  private jensenRetired = false;
+  /** The alleged spy, while the spy story runs (and a moment after, while they fade out). */
+  private spy: Spy | null = null;
   private offer: LoanOffer | null = null;
   /** Loans taken from Jensen this level. */
   private loans = 0;
@@ -430,6 +442,8 @@ export class Game implements RivalWorld, JensenWorld {
     this.loans = 0;
     this.jensenTimer = rand(...JENSEN_FIRST_VISIT);
     this.nextVisit = pick(['giveaway', 'loan'] as const);
+    this.jensenRetired = false;
+    this.spy = null;
     this.news.reset();
     this.news.report(Headlines.levelStart(seriesName(this.level)));
     this.rain = null;
@@ -614,6 +628,7 @@ export class Game implements RivalWorld, JensenWorld {
     this.updateJensen(dt);
     this.updateSwarm(dt);
     this.updateNews(dt);
+    this.updateSpy(dt);
     this.updateLeader();
 
     this.pickups = this.pickups.filter((pk) => pk.alive);
@@ -768,6 +783,14 @@ export class Game implements RivalWorld, JensenWorld {
       if (!touching && Math.acos(clamp(facing, -1, 1)) > SHOVE_ARC) continue;
       this.hitThisShove.add(r);
       this.hitRival(r, d > 1 ? normalize(to) : p.look);
+    }
+    const spy = this.spy;
+    if (spy?.active) {
+      const to = sub(spy.pos, p.pos);
+      const d = length(to);
+      const touching = d < p.radius + spy.radius + 4;
+      const facing = d > 1 ? (p.look.x * to.x + p.look.y * to.y) / d : 1;
+      if (d <= SHOVE_RANGE + spy.radius && (touching || Math.acos(clamp(facing, -1, 1)) <= SHOVE_ARC)) this.catchSpy();
     }
   }
 
@@ -1041,6 +1064,12 @@ export class Game implements RivalWorld, JensenWorld {
         break;
       case 'summit':
         this.safetySummit();
+        break;
+      case 'spy':
+        this.spyAppears();
+        break;
+      case 'resign':
+        this.jensenResigns();
         break;
     }
   }
@@ -1318,23 +1347,155 @@ export class Game implements RivalWorld, JensenWorld {
   }
 
   // -------------------------------------------------------------------------
+  // Breaking news: the alleged spy
+  // -------------------------------------------------------------------------
+
+  /** An alleged spy turns up behind Sam, just out of sight. The labs have never met them. */
+  private spyAppears(): void {
+    const p = this.player;
+    const back = Math.atan2(-p.look.y, -p.look.x);
+    const m = 80;
+    let pos: Vec | null = null;
+    for (let i = 0; i < 24 && !pos; i++) {
+      const a = back + rand(-0.7, 0.7) * (i < 12 ? 1 : 3);
+      const d = rand(300, 360);
+      const c = { x: p.pos.x + Math.cos(a) * d, y: p.pos.y + Math.sin(a) * d };
+      if (c.x < m || c.x > WORLD_W - m || c.y < m || c.y > WORLD_H - m) continue;
+      if (this.water.some((w) => w.contains(c, 20))) continue;
+      pos = c;
+    }
+    pos ??= { x: clamp(p.pos.x - 320, m, WORLD_W - m), y: clamp(p.pos.y, m, WORLD_H - m) };
+    this.spy = new Spy(pos);
+    this.rivals.find((r) => r.team === this.teams.china)?.say(pick(SPY_DENIALS), 2.4);
+  }
+
+  private updateSpy(dt: number): void {
+    const spy = this.spy;
+    if (!spy) return;
+    const p = this.player;
+    if (spy.update(dt, p.pos, p.look) === 'escaped') this.spyEscapes(spy);
+    if (spy.state === 'sneak' && !this.news.isRunning('spy')) spy.leave();
+    if (spy.active && spy.touchable && p.fired <= 0 && dist(spy.pos, p.pos) < spy.radius + p.radius) {
+      if (spy.touch(p.pos, p.look) === 'caught') this.catchSpy();
+      else if (p.invuln <= 0) this.spySteals(spy);
+    }
+    if (spy.done) this.spy = null;
+  }
+
+  /** Caught: a bounty, and any RAM they took comes back. Unlike shoving a rival, this is good press. */
+  private catchSpy(): void {
+    const spy = this.spy;
+    if (!spy?.active) return;
+    const p = this.player;
+    spy.bust();
+    this.score += SPY_BOUNTY;
+    for (let i = 0; i < spy.loot; i++) {
+      this.collect(new Pickup('ram', { x: spy.pos.x + rand(-6, 6), y: spy.pos.y + rand(-6, 6) }));
+    }
+    const { x, y } = spy.pos;
+    this.fx.text(x, y - 52, `SPY CAUGHT! +${SPY_BOUNTY}`, '#5dff9a', 13);
+    this.fx.confetti(x, y - 10, 50);
+    this.fx.ring(x, y, '#5dff9a', 90, 0.5, 4);
+    this.screenFx.fly(this.toScreen(spy.pos), HUD_SCORE, 'gpu');
+    this.screenFx.flash('#5dff9a', 0.12, 0.3);
+    this.shake = Math.max(this.shake, 5);
+    this.sfx.busted();
+    p.say(pick(['Gotcha!', 'Nice try.', 'Not my weights!']), 1.8);
+    this.news.report(Headlines.spyCaught(), 'spy', 0);
+  }
+
+  /** Touched from behind: they copy some of Sam's RAM and run. */
+  private spySteals(spy: Spy): void {
+    const p = this.player;
+    const n = Math.min(SPY_STEAL, p.ram);
+    p.ram -= n;
+    this.teams.player.ram -= n;
+    spy.steal(n);
+    this.combo = 0;
+    this.comboTimer = 0;
+    p.invuln = 1;
+    this.shake = Math.max(this.shake, 8);
+    this.fx.text(p.pos.x, p.pos.y - 40, n > 0 ? `SECRETS COPIED! -${n} RAM` : 'SECRETS COPIED!', SPY_COLOR, 11);
+    if (n > 0) this.fx.fling(p.pos, spy.pos, '#2fbf6a', n * 5 + 3);
+    this.screenFx.flash('#ff3b3b', 0.22, 0.3);
+    this.sfx.steal();
+    p.say(n > 0 ? 'Hey! Come back with my RAM!' : 'Joke is on you, I had no RAM.', 2);
+    this.news.report(Headlines.spyStole(), 'spy', 0);
+  }
+
+  /** Got away: whatever they took ends up with the Chinese Labs. Coincidentally. */
+  private spyEscapes(spy: Spy): void {
+    this.teams.china.ram += spy.loot;
+    this.fx.beam(spy.pos.x, spy.pos.y, SPY_COLOR);
+    this.fx.text(spy.pos.x, spy.pos.y - 44, 'SPY ESCAPED', SPY_COLOR, 11);
+    this.news.report(Headlines.spyEscaped(), 'spy', 0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Breaking news: Jensen steps down
+  // -------------------------------------------------------------------------
+
+  /** Whatever Jensen was doing ends (an open offer is withdrawn), and he walks off with his box. */
+  private jensenResigns(): void {
+    if (this.offer) {
+      this.offer = null;
+      this.fx.text(this.player.pos.x, this.player.pos.y - 60, 'OFFER WITHDRAWN', JENSEN_COLOR, 10);
+    }
+    const old = this.jensen;
+    if (old && !old.gone) this.fx.beam(old.pos.x, old.pos.y, JENSEN_COLOR);
+    const pos = old && !old.gone ? { ...old.pos } : this.jensenSpot(160, VIEW_W - 150);
+    this.jensen = new Jensen('resign', pos);
+    this.jensenRetired = true;
+    this.bubble = Math.max(0, this.bubble - RESIGN_BUBBLE);
+    this.bubbleNote = `NVDA -${Math.round(RESIGN_BUBBLE * 100)}%!`;
+    this.screenFx.bubblePulse = 1;
+    this.fx.beam(pos.x, pos.y, JENSEN_COLOR);
+    this.fx.ring(pos.x, pos.y, JENSEN_COLOR, 70, 0.5, 3);
+    this.sfx.resign();
+    this.news.report(Headlines.resigned());
+  }
+
+  /** A GPU falls out of the box as he walks off. It slides back toward whoever's following. */
+  jensenDropGpu(j: Jensen): void {
+    const pk = new Pickup('gpu', { x: j.pos.x, y: j.pos.y + 4 });
+    const back = normalize(scale(j.vel, -1));
+    pk.vel.x = back.x * rand(60, 120) + rand(-40, 40);
+    pk.vel.y = back.y * rand(60, 120) + rand(-40, 40);
+    this.pickups.push(pk);
+    this.fx.burst(j.pos.x, j.pos.y + 4, '#ffd75e', 6, 90, 2.5, 0.4);
+    if (dist(j.pos, this.player.pos) < this.visionRadius() + 200) this.sfx.thud();
+  }
+
+  // -------------------------------------------------------------------------
   // Jensen: free GPUs, and loans to buy his chips
   // -------------------------------------------------------------------------
 
   /** Brings Jensen in near Sam. Public so it can be tried from the dev console: `game.summonJensen('loan')`. */
-  summonJensen(visit: JensenVisit = this.nextVisit): void {
-    if (this.state !== 'playing' || this.jensen) return;
+  summonJensen(visit: DropInVisit = this.nextVisit): void {
+    if (this.state !== 'playing' || this.jensen || this.jensenRetired) return;
     this.nextVisit = visit === 'giveaway' ? 'loan' : 'giveaway';
     this.jensenTimer = rand(...JENSEN_INTERVAL);
 
-    // Close enough to see, far enough from the world edges that thrown GPUs stay inside, and on a
-    // part of the screen where his speech isn't hidden by the HUD (or, for a loan, by the pop-up).
+    const pos =
+      visit === 'loan' ? this.jensenSpot(140, 560) : this.jensenSpot(rand(170, 220), VIEW_W - 150);
+    this.jensen = new Jensen(visit, pos);
+    this.fx.beam(pos.x, pos.y, JENSEN_COLOR);
+    this.fx.ring(pos.x, pos.y, JENSEN_COLOR, 70, 0.5, 3);
+    this.fx.text(pos.x, pos.y - 62, visit === 'loan' ? 'SPECIAL OFFER!' : "JENSEN'S KEYNOTE!", JENSEN_COLOR, 11);
+    this.sfx.keynote();
+  }
+
+  /**
+   * Somewhere `d` from Sam that's close enough to see, far enough from the world edges that thrown GPUs
+   * stay inside, and on a part of the screen where his speech isn't hidden by the HUD (or, with
+   * `maxScreenX` lowered, by the loan pop-up on the right).
+   */
+  private jensenSpot(d: number, maxScreenX: number): Vec {
     const p = this.player.pos;
-    const d = visit === 'loan' ? 140 : rand(170, 220);
     const m = 130;
     const camX = clamp(p.x - VIEW_W / 2, 0, WORLD_W - VIEW_W);
     const camY = clamp(p.y - VIEW_H / 2, 0, WORLD_H - VIEW_H);
-    const safe = { x0: 150, x1: visit === 'loan' ? 560 : VIEW_W - 150, y0: 210, y1: VIEW_H - 170 };
+    const safe = { x0: 150, x1: maxScreenX, y0: 210, y1: VIEW_H - 170 };
     let pos: Vec | null = null;
     for (let i = 0; i < 24 && !pos; i++) {
       const a = rand(0, TAU);
@@ -1346,16 +1507,10 @@ export class Game implements RivalWorld, JensenWorld {
       if (this.water.some((w) => dist(c, w.pos) < w.radius + 30)) continue;
       pos = c;
     }
-    pos ??= {
+    return (pos ??= {
       x: clamp(camX + clamp(p.x - camX - d, safe.x0, safe.x1), m, WORLD_W - m),
       y: clamp(camY + clamp(p.y - camY, safe.y0, safe.y1), m, WORLD_H - m),
-    };
-
-    this.jensen = new Jensen(visit, pos);
-    this.fx.beam(pos.x, pos.y, JENSEN_COLOR);
-    this.fx.ring(pos.x, pos.y, JENSEN_COLOR, 70, 0.5, 3);
-    this.fx.text(pos.x, pos.y - 62, visit === 'loan' ? 'SPECIAL OFFER!' : "JENSEN'S KEYNOTE!", JENSEN_COLOR, 11);
-    this.sfx.keynote();
+    });
   }
 
   private updateJensen(dt: number): void {
@@ -1363,7 +1518,7 @@ export class Game implements RivalWorld, JensenWorld {
     if (j) {
       j.update(dt, this);
       if (j.gone) this.jensen = null;
-    } else {
+    } else if (!this.jensenRetired) {
       this.jensenTimer -= dt;
       if (this.jensenTimer <= 0) this.summonJensen();
     }
@@ -1610,6 +1765,7 @@ export class Game implements RivalWorld, JensenWorld {
     const actors: Drawable[] = [...this.rivals.filter((r) => inView(r.pos, 60)), p];
     if (this.jensen && inView(this.jensen.pos, 80)) actors.push(this.jensen);
     actors.push(...this.civilians.filter((c) => inView(c.pos, 70)));
+    if (this.spy && inView(this.spy.pos, 70)) actors.push(this.spy);
     actors.sort((a, b) => a.pos.y - b.pos.y);
     for (const a of actors) a.draw(ctx, t);
     this.fx.drawParticles(ctx);
@@ -1637,6 +1793,7 @@ export class Game implements RivalWorld, JensenWorld {
     for (const c of this.civilians) if (inView(c.pos, 120)) c.drawSpeech(ctx);
     for (const r of this.rivals) if (inView(r.pos, 120)) r.drawSpeech(ctx);
     this.jensen?.drawSpeech(ctx);
+    this.spy?.drawSpeech(ctx);
     p.drawSpeech(ctx);
     this.fx.drawOverlay(ctx);
     ctx.restore();
@@ -1752,7 +1909,10 @@ export class Game implements RivalWorld, JensenWorld {
 
     // Green to Jensen's keynote when it's out in the dark, so the free GPUs aren't missed.
     const j = this.jensen;
-    if (j && j.visit === 'giveaway') this.drawArrow(ox, oy, j.pos, this.visionRadius() * 0.9, JENSEN_COLOR);
+    if (j && j.visit !== 'loan') this.drawArrow(ox, oy, j.pos, this.visionRadius() * 0.9, JENSEN_COLOR);
+    // Red to the spy when they're out in the dark: sneaking up, or running off with your RAM.
+    const spy = this.spy;
+    if (spy?.active) this.drawArrow(ox, oy, spy.pos, this.visionRadius() * 0.75, SPY_COLOR);
     if (this.rain) this.drawArrow(ox, oy, this.rain.pos, 130, '#5dff9a');
   }
 

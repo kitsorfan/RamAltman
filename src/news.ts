@@ -2,7 +2,7 @@ import { NEWS_FIRST, NEWS_INTERVAL } from './config';
 import { pick, rand, shuffle } from './math';
 
 /** Breaking stories that change the rules for a few seconds. */
-export type NewsKind = 'rain' | 'panic' | 'heatwave' | 'lawsuit' | 'summit';
+export type NewsKind = 'rain' | 'panic' | 'heatwave' | 'lawsuit' | 'summit' | 'spy' | 'resign';
 
 export interface NewsStory {
   readonly kind: NewsKind;
@@ -58,7 +58,26 @@ export const STORIES: Readonly<Record<NewsKind, NewsStory>> = {
     duration: 9,
     samLines: ['Great. More RAM for me.', 'I RSVPed "maybe".'],
   },
+  spy: {
+    kind: 'spy',
+    title: 'SPY SCANDAL',
+    headline: 'Alleged spy spotted in the desert. China: "A smear."',
+    rule: 'Face the spy to freeze them · Walk into them to catch them',
+    duration: 14,
+    samLines: ['A spy? In MY desert?', 'Everyone act natural.'],
+  },
+  resign: {
+    kind: 'resign',
+    title: 'JENSEN STEPS DOWN',
+    headline: 'Jensen resigns amid spy probe. NVDA -4%.',
+    rule: 'Follow Jensen and grab the GPUs he drops · No more loans this series',
+    duration: 10,
+    samLines: ['Wait, who lends me money now?', 'So… is my loan still on?'],
+  },
 };
+
+/** This week's biggest stories go first in a new session: the spy, then Jensen stepping down. */
+const HOT_FIRST: readonly NewsKind[] = ['spy', 'resign'];
 
 export const NEWS_KINDS = Object.keys(STORIES) as NewsKind[];
 
@@ -69,6 +88,9 @@ export const PANIC_LINES: Readonly<Record<string, readonly string[]>> = {
   gemini: ['Searching: "how to short"', 'Did you mean: crash?'],
   china: ['Efficient!', 'Told you.'],
 };
+
+/** What a Chinese Labs model says when the spy story breaks. */
+export const SPY_DENIALS = ['Never met them.', 'Not ours. Probably.', 'A smear!'] as const;
 
 export const SUMMIT_LECTURE = [
   'Slide 1 of 412…',
@@ -124,6 +146,10 @@ export const Headlines = {
     pick([`${name} drops out of nowhere, matches the frontier`, `${name} released overnight for $5M. Markets confused.`, `Surprise: ${name} is out, and it's open weights`]),
   solar: (): string =>
     pick(['Sam goes solar, calls it "sustainable AGI"', 'Sam to power AGI with "the big lamp in the sky"', "Elon claims credit for Sam's solar panels"]),
+  spyCaught: (): string => pick(['Sam catches alleged spy. China: "A smear."', 'Alleged spy caught, claims to be "a consultant"']),
+  spyStole: (): string => pick(["Alleged spy copies Sam's RAM, heads for the airport", "Man in trench coat \"borrows\" Sam's RAM"]),
+  spyEscaped: (): string => pick(['Alleged spy escapes. Chinese Labs RAM up, "coincidentally"', 'Spy gets away. China: "Never heard of them"']),
+  resigned: (): string => pick(['Congress summons Jensen to testify', 'Interim CEO: "All loans are under review"', 'NVDA loses $182B. Leather jacket unharmed.']),
   bubbleDanger: (): string => pick(['Analysts: "This is definitely NOT a bubble"', 'Experts agree bubble will "probably" hold']),
 } as const;
 
@@ -153,6 +179,8 @@ export const FILLER = [
   'Dario: "Have you considered the risks?"',
   'Chinese lab open-sources the desert',
   'RAM now accepted as rent in San Francisco',
+  'AI labs hire ex-spies to catch spies',
+  'Leather jacket seen leaving HQ in a cardboard box',
 ] as const;
 
 /** A headline on the ticker. */
@@ -178,7 +206,7 @@ export class NewsDesk {
   active: ActiveStory | null = null;
   ticker: TickerItem | null = null;
   private timer = rand(...NEWS_FIRST);
-  private bag: NewsKind[] = [];
+  private bag: NewsKind[] = [...shuffle(NEWS_KINDS.filter((k) => !HOT_FIRST.includes(k))), ...HOT_FIRST.toReversed()];
   private fillerBag: string[] = [];
   private queue: string[] = [];
   private readonly lastByKey = new Map<string, number>();

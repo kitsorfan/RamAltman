@@ -64,6 +64,13 @@ describe('breaking news', () => {
     expect(run(desk, DT * 2)).toHaveLength(1);
   });
 
+  it("this week's stories break first in a new session: the spy, then Jensen stepping down", () => {
+    const desk = new NewsDesk();
+    expect(runUntilStory(desk, NEWS_FIRST[1] + 0.1)?.kind).toBe('spy');
+    desk.reset();
+    expect(runUntilStory(desk, NEWS_FIRST[1] + 0.1)?.kind).toBe('resign');
+  });
+
   it('tells every story once before repeating any', () => {
     const desk = new NewsDesk();
     const kinds = NEWS_KINDS.map(() => {

@@ -1,14 +1,17 @@
 import type { Sfx } from '../audio/sfx';
-import { WORLD_H, WORLD_W } from '../config';
+import { RESIGN_GPUS, WORLD_H, WORLD_W } from '../config';
 import type { Effects } from '../fx/effects';
 import { clamp, dist, length, lerp, normalize, pick, rand, scale, sub, vec, type Vec } from '../math';
-import { TAU, dot, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, type ChibiStyle, type HeadInfo } from '../render/draw';
+import { TAU, dot, drawCardboardBox, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, type ChibiStyle, type HeadInfo } from '../render/draw';
 import type { Player } from './player';
 
-/** What a visit is for: a keynote that throws free GPUs around, or a loan offer for Sam. */
-export type JensenVisit = 'giveaway' | 'loan';
+/**
+ * What a visit is for: a keynote that throws free GPUs around, a loan offer for Sam, or (breaking news)
+ * stepping down: he walks off with his box, dropping GPUs as he goes.
+ */
+export type JensenVisit = 'giveaway' | 'loan' | 'resign';
 
-type Phase = 'arrive' | 'keynote' | 'pitch' | 'linger' | 'gone';
+type Phase = 'arrive' | 'keynote' | 'pitch' | 'announce' | 'walkout' | 'linger' | 'gone';
 
 /** What Jensen can see and do in the game world. */
 export interface JensenWorld {
@@ -19,6 +22,8 @@ export interface JensenWorld {
   jensenGiveaway(jensen: Jensen): void;
   /** Open the loan offer. Answer it with `resolve()`. */
   jensenPitch(jensen: Jensen, pitch: string): void;
+  /** Stepping down: a GPU falls out of the box. */
+  jensenDropGpu(jensen: Jensen): void;
 }
 
 export const JENSEN_COLOR = '#9be15d';
@@ -28,6 +33,9 @@ const KEYNOTE_TIME = 1.4;
 const LINGER_GIVEAWAY = 2.6;
 const LINGER_LOAN = 1.8;
 const PITCH_DISTANCE = 100; // how close he stays while pitching
+const ANNOUNCE_TIME = 1.8;
+const DROP_EVERY = 0.7;
+const WALK_SPEED = 125; // slower than Sam, so the trail of GPUs can be followed
 
 const KEYNOTE_LINES = ['The more you buy, the more you save!', 'Welcome to my keynote!', 'Who wants a GPU?'] as const;
 const GIVEAWAY_LINES = ['Free GPUs! Catch!', 'GPUs for everyone!', 'Tell your investors!'] as const;
@@ -38,6 +46,8 @@ const PITCHES = [
   'I fund your round. You buy my chips. Deal?',
 ] as const;
 const ACCEPT_LINES = ['Pleasure doing business!', 'See you next round!', 'Wise choice. Very wise.'] as const;
+const RESIGN_LINES = ["I'm stepping down. Effective immediately.", 'I will cooperate fully. Bye!', 'Time to step down.'] as const;
+const FAREWELL_LINES = ['See you in Congress.', 'The more you resign, the more you save.', 'Keep the GPUs.'] as const;
 
 const JENSEN_STYLE: ChibiStyle = { body: '#16161b', trim: '#000000', skin: '#f0cba6', hair: '#c4c7cf', hairStyle: 'swept' };
 
@@ -49,6 +59,8 @@ export class Jensen {
   readonly radius = 17;
   /** Holding a GPU over his head (keynote pose). */
   holding = false;
+  /** Carrying his cardboard box out of the building (stepping down). */
+  carrying = false;
   showLabel = true;
   private phase: Phase = 'arrive';
   private phaseTime = ARRIVE_TIME;
@@ -56,6 +68,8 @@ export class Jensen {
   private look: Vec = vec(0, 1);
   private speech: string | null = null;
   private speechTime = 0;
+  private dropsLeft = 0;
+  private dropTimer = 0;
 
   constructor(visit: JensenVisit, pos: Vec) {
     this.visit = visit;
@@ -112,6 +126,10 @@ export class Jensen {
             this.holding = true;
             this.say(pick(KEYNOTE_LINES), KEYNOTE_TIME + 0.6);
             this.enter('keynote', KEYNOTE_TIME);
+          } else if (this.visit === 'resign') {
+            this.carrying = true;
+            this.say(pick(RESIGN_LINES), ANNOUNCE_TIME + 0.8);
+            this.enter('announce', ANNOUNCE_TIME);
           } else {
             const pitch = pick(PITCHES);
             this.say(pitch, 30);
@@ -130,6 +148,33 @@ export class Jensen {
           this.enter('linger', LINGER_GIVEAWAY);
         }
         break;
+      case 'announce':
+        this.carrying = true;
+        this.brake(dt);
+        if (this.phaseTime <= 0) {
+          this.dropsLeft = RESIGN_GPUS;
+          this.dropTimer = 0.35;
+          this.enter('walkout', Infinity);
+        }
+        break;
+      case 'walkout': {
+        // Walks away from Sam (and away from the walls), a GPU falling out of the box every so often.
+        const away = this.avoidWalls(length(toPlayer) > 1 ? scale(toPlayer, -1) : vec(1, 0));
+        this.steer(away, WALK_SPEED, dt);
+        this.look = away;
+        this.dropTimer -= dt;
+        if (this.dropTimer <= 0 && this.dropsLeft > 0) {
+          this.dropTimer = DROP_EVERY;
+          this.dropsLeft--;
+          world.jensenDropGpu(this);
+        }
+        if (this.dropsLeft === 0) {
+          this.carrying = false;
+          this.say(pick(FAREWELL_LINES), 2.2);
+          this.enter('linger', 1.6);
+        }
+        break;
+      }
       case 'pitch': {
         // A persistent salesman: stays close while you think it over.
         const d = dist(this.pos, world.player.pos);
@@ -159,6 +204,16 @@ export class Jensen {
     this.enter('gone', 0);
   }
 
+  private avoidWalls(dir: Vec): Vec {
+    const m = 160;
+    let { x, y } = normalize(dir);
+    if (this.pos.x < m) x += 1;
+    if (this.pos.x > WORLD_W - m) x -= 1;
+    if (this.pos.y < m) y += 1;
+    if (this.pos.y > WORLD_H - m) y -= 1;
+    return normalize({ x, y });
+  }
+
   private steer(dir: Vec, speed: number, dt: number): void {
     const n = normalize(dir);
     const k = Math.min(1, dt * 6);
@@ -175,12 +230,13 @@ export class Jensen {
     const { x, y } = this.pos;
     groundShadow(ctx, x, y + this.radius * 0.85, this.radius * 0.9);
     const bob = length(this.vel) > 20 ? Math.sin(this.t * 14) * 1.5 : Math.sin(time * 2) * 0.6;
-    drawJensenFigure(ctx, x, y, this.radius, this.look, bob, this.holding, time);
+    drawJensenFigure(ctx, x, y, this.radius, this.look, bob, this.holding, time, this.carrying);
     if (this.showLabel) {
       ctx.font = pixelFont(8);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      outlinedText(ctx, 'Jensen', x, y - this.radius - (this.holding ? 34 : 12), JENSEN_COLOR);
+      const label = this.visit === 'resign' ? 'Jensen (ex-CEO)' : 'Jensen';
+      outlinedText(ctx, label, x, y - this.radius - (this.holding ? 34 : 12), JENSEN_COLOR);
     }
   }
 
@@ -217,7 +273,7 @@ export class Jensen {
   }
 }
 
-/** Leather jacket over a black tee, silver hair, and (on stage) a GPU held high. */
+/** Leather jacket over a black tee, silver hair, and (on stage) a GPU held high, or (leaving) a box of them. */
 export function drawJensenFigure(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -227,6 +283,7 @@ export function drawJensenFigure(
   bob: number,
   holding: boolean,
   time: number,
+  carrying = false,
 ): HeadInfo {
   const head = drawChibi(ctx, x, y, r, JENSEN_STYLE, look, bob);
   const by = y + bob;
@@ -289,5 +346,6 @@ export function drawJensenFigure(
       ctx.stroke();
     }
   }
+  if (carrying) drawCardboardBox(ctx, x, by, time, JENSEN_STYLE.skin, 'gpus');
   return head;
 }

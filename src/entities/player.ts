@@ -10,7 +10,7 @@ import {
   WORLD_W,
 } from '../config';
 import { clamp, lerp, normalize, vec, type Vec } from '../math';
-import { TAU, dot, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, uiFont, type ChibiStyle } from '../render/draw';
+import { TAU, dot, drawCardboardBox, drawChibi, groundShadow, outlinedText, pixelFont, speechBubble, uiFont, type ChibiStyle } from '../render/draw';
 import { drawPanels } from '../render/solar';
 
 const ZERO: Vec = { x: 0, y: 0 };
@@ -228,7 +228,7 @@ export class Player {
       ctx.stroke();
     }
 
-    if (this.fired > 0) drawBox(ctx, x, y + bob, time);
+    if (this.fired > 0) drawCardboardBox(ctx, x, y + bob, time, SAM_STYLE.skin, 'plant');
 
     if (this.inWater) {
       ctx.fillStyle = 'rgba(60, 150, 230, 0.55)';
@@ -248,35 +248,6 @@ export class Player {
     if (this.tweetText) drawTweet(ctx, this.pos.x, this.pos.y - this.radius - 22, this.tweetText, this.tweetTime);
     else if (this.speech) speechBubble(ctx, this.pos.x, this.pos.y - this.radius - 22, this.speech, '#9be7ff');
   }
-}
-
-/** The classic "you're fired" cardboard box, with a desk plant poking out. */
-function drawBox(ctx: CanvasRenderingContext2D, x: number, y: number, time: number): void {
-  const bx = x - 13;
-  const by = y + 4;
-  ctx.strokeStyle = '#3e7d32';
-  ctx.lineWidth = 2;
-  for (const [dx, lean] of [[5, -0.3], [8, 0.2], [11, 0.7]] as const) {
-    const sway = Math.sin(time * 3 + dx) * 1.2;
-    ctx.beginPath();
-    ctx.moveTo(x + dx, by + 2);
-    ctx.quadraticCurveTo(x + dx + lean * 3, by - 5, x + dx + lean * 6 + sway, by - 9);
-    ctx.stroke();
-  }
-  ctx.fillStyle = '#c99a5b';
-  ctx.strokeStyle = '#7a5530';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(bx, by, 26, 15, 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(bx + 3, by + 4);
-  ctx.lineTo(bx + 23, by + 4);
-  ctx.stroke();
-  ctx.fillStyle = '#f2cfae';
-  dot(ctx, bx + 1, by + 8, 3.5);
-  dot(ctx, bx + 25, by + 8, 3.5);
 }
 
 /** A little post card: avatar, handle, and something vague in lowercase. */

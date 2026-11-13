@@ -188,6 +188,18 @@ export class Sfx {
     this.tone(130, 0.12, { type: 'triangle', slide: 60, vol: 0.12 });
   }
 
+  /** Spy caught: a short "busted" fanfare. */
+  busted(): void {
+    [523, 659, 784].forEach((f, i) => this.tone(f, 0.1, { type: 'square', vol: 0.09, delay: i * 0.07 }));
+    this.tone(1047, 0.28, { type: 'triangle', vol: 0.12, delay: 0.22 });
+  }
+
+  /** Jensen steps down: a sad trombone. */
+  resign(): void {
+    [392, 370, 349].forEach((f, i) => this.tone(f, 0.3, { type: 'sawtooth', vol: 0.07, cutoff: 1400, delay: i * 0.32 }));
+    this.tone(330, 0.9, { type: 'sawtooth', slide: 300, vol: 0.07, cutoff: 1400, delay: 0.96 });
+  }
+
   levelUp(): void {
     [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.18, { vol: 0.1, delay: i * 0.09 }));
   }
