@@ -2,9 +2,34 @@
 
 A parody top-down arcade game in TypeScript. You play Sam, racing to hoard RAM before the AI bubble bursts, while Dario, Elon, Gemini and the Chinese Labs compete for the same supply. The desert is dark, you run hot, and water and energy are hard to find.
 
+![Title screen: Dario, Elon, Gemini and the Chinese Labs line up with Sam, while Jensen walks off with a cardboard box saying "I'm stepping down!"](docs/screenshots/title.png)
+
 Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 
 > **Disclaimer:** Ram Altman is a work of parody. It is not affiliated with, endorsed by, or sponsored by any company or person it depicts.
+
+## Screenshots
+
+<!-- markdownlint-disable MD033 -- an HTML table is the only way to get a two-column image grid on GitHub -->
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/pooling.png" alt="Sam stands next to a gamer and their glowing PC. The gamer says &quot;Don't touch my rig!&quot; while the label reads POOLING TO THE CLOUD."></td>
+    <td width="50%"><img src="docs/screenshots/loan.png" alt="Jensen beams down next to Sam with a pop-up offer: &quot;The more you borrow, the more you save!&quot; with TAKE THE DEAL and NO THANKS buttons."></td>
+  </tr>
+  <tr>
+    <td align="center">Sam "pools" a gamer's idle RAM to the cloud</td>
+    <td align="center">Jensen offers to lend Sam the money to buy his chips</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/spy.png" alt="BREAKING NEWS: alleged spy spotted in the desert. The spy hides behind a newspaper and says &quot;Nothing to see here.&quot;"></td>
+    <td width="50%"><img src="docs/screenshots/resign.png" alt="BREAKING: Jensen steps down. Jensen (ex-CEO) walks off carrying a box, dropping GPUs that Sam picks up for +1000."></td>
+  </tr>
+  <tr>
+    <td align="center">Breaking news: an alleged spy freezes whenever Sam looks their way</td>
+    <td align="center">Breaking news: Jensen steps down and drops GPUs on his way out</td>
+  </tr>
+</table>
+<!-- markdownlint-enable MD033 -->
 
 ## How to play
 
@@ -105,6 +130,7 @@ src/
   fx/                world effects (particles, beams, footprints) and screen effects (flashes, HUD flyers)
   render/            title screen, HUD, overlays, Jensen's loan pop-up, solar panels and sun, background, drawing helpers
 e2e/                 Playwright end-to-end tests
+docs/screenshots/    screenshots used in this README
 .github/             CI/CD workflow and Dependabot config
 ```
 
