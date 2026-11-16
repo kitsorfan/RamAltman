@@ -323,7 +323,11 @@ export class Game implements RivalWorld, JensenWorld {
   private readonly resize = (): void => {
     const dpr = window.devicePixelRatio || 1;
     const cssScale = this.canvas.clientWidth > 0 ? this.canvas.clientWidth / VIEW_W : 1;
-    this.pxScale = clamp(cssScale * dpr, 1, 3);
+    // Snap to a backing width that's a multiple of 3, so both sides of the 3:2 canvas are whole pixels.
+    // Otherwise fractional pixel ratios (2.625 on many Android phones) round the canvas up a pixel,
+    // and the fog leaves an unfogged sliver down the edge.
+    const width = Math.round((VIEW_W * clamp(cssScale * dpr, 1, 3)) / 3) * 3;
+    this.pxScale = width / VIEW_W;
     for (const c of [this.canvas, this.fogCanvas]) {
       c.width = Math.round(VIEW_W * this.pxScale);
       c.height = Math.round(VIEW_H * this.pxScale);
