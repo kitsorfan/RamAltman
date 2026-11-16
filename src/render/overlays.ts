@@ -62,7 +62,8 @@ export function drawBanner(
   ctx.restore();
 }
 
-export function drawPaused(ctx: CanvasRenderingContext2D): void {
+/** Paused. On touch, the sound and music toggles are on-screen buttons below this text. */
+export function drawPaused(ctx: CanvasRenderingContext2D, touch: boolean): void {
   dim(ctx, 0.55);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -70,10 +71,11 @@ export function drawPaused(ctx: CanvasRenderingContext2D): void {
   outlinedText(ctx, 'PAUSED', VIEW_W / 2, VIEW_H / 2 - 16, '#ffffff', '#2a0f3d', 6);
   ctx.font = uiFont(16, 600);
   ctx.fillStyle = '#d9d2f2';
-  ctx.fillText('Press P to resume  ·  M sound  ·  N music', VIEW_W / 2, VIEW_H / 2 + 28);
+  const how = touch ? 'Tap anywhere to resume' : 'Press P or click to resume  ·  M sound  ·  N music';
+  ctx.fillText(how, VIEW_W / 2, VIEW_H / 2 + 28);
 }
 
-export function drawLevelClear(ctx: CanvasRenderingContext2D, info: LevelClearInfo, time: number): void {
+export function drawLevelClear(ctx: CanvasRenderingContext2D, info: LevelClearInfo, time: number, touch: boolean): void {
   dim(ctx, 0.5);
   const w = 560;
   const h = 400;
@@ -115,11 +117,12 @@ export function drawLevelClear(ctx: CanvasRenderingContext2D, info: LevelClearIn
   }
   if (blinkOn(time)) {
     ctx.font = pixelFont(12);
-    outlinedText(ctx, `PRESS ENTER FOR SERIES ${seriesName(info.level + 1)}`, cx, y + h - 32, '#ffe066', '#2a0f3d', 4);
+    const prompt = `${touch ? 'TAP' : 'PRESS ENTER'} FOR SERIES ${seriesName(info.level + 1)}`;
+    outlinedText(ctx, prompt, cx, y + h - 32, '#ffe066', '#2a0f3d', 4);
   }
 }
 
-export function drawGameOver(ctx: CanvasRenderingContext2D, info: GameOverInfo, time: number): void {
+export function drawGameOver(ctx: CanvasRenderingContext2D, info: GameOverInfo, time: number, touch: boolean): void {
   dim(ctx, 0.6);
   const w = 580;
   const h = 380;
@@ -156,7 +159,7 @@ export function drawGameOver(ctx: CanvasRenderingContext2D, info: GameOverInfo, 
 
   if (blinkOn(time)) {
     ctx.font = pixelFont(12);
-    outlinedText(ctx, 'PRESS ENTER TO RAISE AGAIN', cx, y + h - 40, '#ffe066', '#2a0f3d', 4);
+    outlinedText(ctx, touch ? 'TAP TO RAISE AGAIN' : 'PRESS ENTER TO RAISE AGAIN', cx, y + h - 40, '#ffe066', '#2a0f3d', 4);
   }
   ctx.font = uiFont(12, 700);
   ctx.fillStyle = '#a99fd0';

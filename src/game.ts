@@ -95,7 +95,7 @@ import { clamp, dist, length, lerp, normalize, pick, rand, scale, sub, vec, type
 import type { Music } from './audio/music';
 import { Background } from './render/background';
 import { TAU, outlinedText, pixelFont, uiFont } from './render/draw';
-import { HUD_ENERGY_BAR, HUD_RAM_BAR, HUD_SCORE, drawHud, drawMinimap } from './render/hud';
+import { HUD_ENERGY_BAR, HUD_RAM_BAR, HUD_SCORE, drawHud, drawMinimap, type SolarState } from './render/hud';
 import {
   drawBanner,
   drawGameOver,
@@ -305,15 +305,30 @@ export class Game implements RivalWorld, JensenWorld {
     });
     this.resize();
     window.addEventListener('resize', this.resize);
-    window.addEventListener('blur', () => {
-      if (this.state === 'playing') this.setState('paused');
+    window.addEventListener('blur', () => this.pause());
+    // Phones: switching apps or locking the screen.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.pause();
     });
-    this.canvas.dataset['state'] = this.state;
+    this.mirror('state', this.state);
     this.music.play('title');
   }
 
   start(): void {
     requestAnimationFrame(this.frame);
+  }
+
+  /** Pauses a game in progress (the window lost focus, the app went to the background, the phone turned upright). */
+  pause(): void {
+    if (this.state === 'playing') this.setState('paused');
+  }
+
+  /**
+   * Mirrors a bit of state onto the canvas as a data attribute, for tests, assistive tech, and the
+   * touch controls' styling (e.g. dimming TWEET while it recharges).
+   */
+  private mirror(name: string, value: string): void {
+    if (this.canvas.dataset[name] !== value) this.canvas.dataset[name] = value;
   }
 
   // -------------------------------------------------------------------------
@@ -347,7 +362,7 @@ export class Game implements RivalWorld, JensenWorld {
     const prev = this.state;
     this.state = state;
     this.stateTime = 0;
-    this.canvas.dataset['state'] = state; // observable by tests and assistive tech
+    this.mirror('state', state);
     switch (state) {
       case 'title':
         this.music.play('title');
@@ -373,6 +388,8 @@ export class Game implements RivalWorld, JensenWorld {
 
     if (this.input.wasPressed('KeyM')) this.showToast(this.audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
     if (this.input.wasPressed('KeyN')) this.showToast(this.audio.toggleMusic() ? 'MUSIC ON' : 'MUSIC OFF');
+    this.mirror('sound', this.audio.isMuted ? 'off' : 'on');
+    this.mirror('music', this.audio.isMusicOn ? 'on' : 'off');
     if (this.toast) {
       this.toast.time -= dt;
       if (this.toast.time <= 0) this.toast = null;
@@ -391,7 +408,7 @@ export class Game implements RivalWorld, JensenWorld {
         this.updatePlaying(dt);
         break;
       case 'paused':
-        if (this.input.wasPressed('KeyP', 'Escape', 'Enter')) this.setState('playing');
+        if (this.input.wasPressed('KeyP', 'Escape') || confirm) this.setState('playing');
         break;
       case 'levelClear':
         this.fx.update(dt);
@@ -1672,7 +1689,7 @@ export class Game implements RivalWorld, JensenWorld {
     ctx.setTransform(this.pxScale, 0, 0, this.pxScale, 0, 0);
 
     if (this.state === 'title') {
-      this.title.draw(ctx, this.highScore);
+      this.title.draw(ctx, this.highScore, this.input.touch);
       this.renderToast();
       return;
     }
@@ -1680,6 +1697,10 @@ export class Game implements RivalWorld, JensenWorld {
     this.renderWorld();
 
     const p = this.player;
+    const tweetReady = 1 - p.tweetCooldown / TWEET_COOLDOWN;
+    const solar: SolarState = p.charging ? 'charging' : p.solarOut ? 'unfolding' : p.power < SOLAR_BELOW ? 'ready' : 'locked';
+    this.mirror('tweet', tweetReady >= 1 ? 'ready' : 'wait');
+    this.mirror('solar', solar);
     drawHud(ctx, {
       score: this.score,
       highScore: this.highScore,
@@ -1715,8 +1736,9 @@ export class Game implements RivalWorld, JensenWorld {
             }
           : null,
       },
-      tweetReady: 1 - p.tweetCooldown / TWEET_COOLDOWN,
-      solar: p.charging ? 'charging' : p.solarOut ? 'unfolding' : p.power < SOLAR_BELOW ? 'ready' : 'locked',
+      tweetReady,
+      solar,
+      touch: this.input.touch,
     });
     drawMinimap(ctx, {
       player: p.pos,
@@ -1744,9 +1766,9 @@ export class Game implements RivalWorld, JensenWorld {
     if (this.banner && this.state === 'playing') {
       drawBanner(ctx, this.banner.title, this.banner.sub, Math.min(1, this.banner.time / 0.6), this.banner.color);
     }
-    if (this.state === 'paused') drawPaused(ctx);
-    if (this.state === 'levelClear' && this.clearInfo) drawLevelClear(ctx, this.clearInfo, this.stateTime);
-    if (this.state === 'gameOver' && this.overInfo) drawGameOver(ctx, this.overInfo, this.stateTime);
+    if (this.state === 'paused') drawPaused(ctx, this.input.touch);
+    if (this.state === 'levelClear' && this.clearInfo) drawLevelClear(ctx, this.clearInfo, this.stateTime, this.input.touch);
+    if (this.state === 'gameOver' && this.overInfo) drawGameOver(ctx, this.overInfo, this.stateTime, this.input.touch);
     this.renderToast();
   }
 
@@ -1955,18 +1977,22 @@ export class Game implements RivalWorld, JensenWorld {
 
   private drawHints(): void {
     const p = this.player;
+    // Name the key, or the on-screen button for touch players.
+    const say = (keys: string, touch: string): string => (this.input.touch ? touch : keys);
     let hint: string | null = null;
     if (p.solarOut && p.solarTime < 4) hint = 'Charging from the sun. It heats you up, though! Move to pack up.';
-    else if (p.power <= 0) hint = 'Out of energy! Press R for solar panels, or grab a yellow energy cell.';
-    else if (p.power < SOLAR_BELOW && !this.solarTaught) hint = 'Low energy! Stand still and press R for solar panels.';
-    else if (p.heat > 50 && !p.inWater && !this.water.some((w) => w.discovered)) {
-      hint = 'Overheating! Press E to sonar-ping for water.';
+    else if (p.power <= 0) {
+      hint = `Out of energy! ${say('Press R', 'Tap SOLAR')} for solar panels, or grab a yellow energy cell.`;
+    } else if (p.power < SOLAR_BELOW && !this.solarTaught) {
+      hint = `Low energy! Stand still and ${say('press R', 'tap SOLAR')} for solar panels.`;
+    } else if (p.heat > 50 && !p.inWater && !this.water.some((w) => w.discovered)) {
+      hint = `Overheating! ${say('Press E', 'Tap SONAR')} to sonar-ping for water.`;
     } else if (this.level === 1 && this.levelTime > 3 && this.levelTime < 10) {
-      hint = 'Tip: SPACE shoves rivals. It costs energy, feeds the bubble, and they hit back!';
+      hint = `Tip: ${say('SPACE', 'SHOVE')} shoves rivals. It costs energy, feeds the bubble, and they hit back!`;
     } else if (this.level === 1 && this.levelTime > 11 && this.levelTime < 18) {
       hint = 'Tip: stand next to people with glowing PCs to take their idle RAM. Bad press, though!';
     } else if (this.level === 1 && this.levelTime > 19 && this.levelTime < 26) {
-      hint = 'Tip: T posts a hype tweet. Nearby rivals stop to read it, but hype inflates the bubble!';
+      hint = `Tip: ${say('T', 'TWEET')} posts a hype tweet. Nearby rivals stop to read it, but hype inflates the bubble!`;
     }
     if (!hint) return;
     const ctx = this.ctx;

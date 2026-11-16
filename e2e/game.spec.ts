@@ -1,27 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-/** Collects anything that would indicate a broken or leaky page. */
-function watchForProblems(page: Page): string[] {
-  const problems: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() === 'error' || msg.type() === 'warning') problems.push(`console ${msg.type()}: ${msg.text()}`);
-  });
-  page.on('pageerror', (err) => problems.push(`page error: ${err.message}`));
-  page.on('requestfailed', (req) => problems.push(`request failed: ${req.url()}`));
-  page.on('response', (res) => {
-    if (res.status() >= 400) problems.push(`HTTP ${res.status()}: ${res.url()}`);
-  });
-  return problems;
-}
-
-const canvas = (page: Page) => page.locator('#game');
-
-/** Converts game coordinates (960x640 logical canvas) to page coordinates. */
-async function toPage(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
-  const box = await canvas(page).boundingBox();
-  if (!box) throw new Error('Game canvas is not visible');
-  return { x: box.x + (x / 960) * box.width, y: box.y + (y / 640) * box.height };
-}
+import { expect, test } from '@playwright/test';
+import { canvas, toPage, watchForProblems } from './helpers';
 
 test('title screen loads cleanly and never contacts third parties', async ({ page, baseURL }) => {
   const problems = watchForProblems(page);
@@ -59,6 +37,17 @@ test('Enter starts the game, P pauses and resumes', async ({ page }) => {
   await page.keyboard.press('KeyP');
   await expect(canvas(page)).toHaveAttribute('data-state', 'playing');
   expect(problems).toEqual([]);
+});
+
+test('desktop players get no touch controls', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('html')).toHaveAttribute('data-input', 'keys');
+  const spot = await toPage(page, 480, 260);
+  await page.mouse.click(spot.x, spot.y);
+  await expect(canvas(page)).toHaveAttribute('data-state', 'playing');
+  await expect(page.locator('html')).toHaveAttribute('data-input', 'keys');
+  await expect(page.locator('.touch-actions')).toBeHidden();
+  await expect(page.locator('.touch-stick-zone')).toBeHidden();
 });
 
 test('clicking the title screen starts the game', async ({ page }) => {

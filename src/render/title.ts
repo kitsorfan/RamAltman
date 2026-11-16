@@ -71,6 +71,16 @@ const CONTROLS: ReadonlyArray<{ keys: readonly string[]; label: string }> = [
   { keys: ['N'], label: 'Music' },
 ];
 
+/** The same row for touch players: the on-screen button names, and what each one does. */
+const TOUCH_CONTROLS: ReadonlyArray<{ keys: readonly string[]; label: string }> = [
+  { keys: ['DRAG LEFT SIDE'], label: 'Move' },
+  { keys: ['SPRINT'], label: 'Hold to run' },
+  { keys: ['SHOVE'], label: 'Hit rivals' },
+  { keys: ['SONAR'], label: 'Find water' },
+  { keys: ['TWEET'], label: 'Distract' },
+  { keys: ['SOLAR'], label: 'Recharge' },
+];
+
 const SAM_LINES = ['We need more RAM!', '$7 trillion, please!', 'Feel the AGI!', "It's NOT a bubble!"] as const;
 const JENSEN_KEYNOTE_LINES = ['The more you buy, the more you save!', 'Who wants a GPU?'] as const;
 const JENSEN_TOSS_LINES = ['I will lend you the money to buy my chips!', 'Free GPUs! Catch!'] as const;
@@ -311,15 +321,16 @@ export class TitleScreen {
   // Drawing
   // -------------------------------------------------------------------------
 
-  draw(ctx: CanvasRenderingContext2D, highScore: number): void {
+  /** `touch`: the player is on touch controls, so show buttons and taps instead of keys. */
+  draw(ctx: CanvasRenderingContext2D, highScore: number, touch: boolean): void {
     const sky = this.drawSky(ctx);
     this.drawSun(ctx, sky);
     this.drawFalling(ctx, this.falling);
     this.drawBubble(ctx);
     this.drawTitle(ctx);
     this.drawCards(ctx);
-    this.drawControls(ctx);
-    this.drawStartButton(ctx);
+    this.drawControls(ctx, touch);
+    this.drawStartButton(ctx, touch);
     this.fx.drawParticles(ctx);
     this.drawDunes(ctx);
     this.drawFalling(ctx, this.tossed);
@@ -525,11 +536,11 @@ export class TitleScreen {
     });
   }
 
-  private drawControls(ctx: CanvasRenderingContext2D): void {
+  private drawControls(ctx: CanvasRenderingContext2D, touch: boolean): void {
     const y = 322;
     const capFont = uiFont(11, 800);
     const labelFont = uiFont(13, 700);
-    const groups = CONTROLS.map((g) => {
+    const groups = (touch ? TOUCH_CONTROLS : CONTROLS).map((g) => {
       ctx.font = capFont;
       const caps = g.keys.map((k) => Math.max(22, ctx.measureText(k).width + 14));
       ctx.font = labelFont;
@@ -571,7 +582,7 @@ export class TitleScreen {
     );
   }
 
-  private drawStartButton(ctx: CanvasRenderingContext2D): void {
+  private drawStartButton(ctx: CanvasRenderingContext2D, touch: boolean): void {
     const cx = VIEW_W / 2;
     const cy = 414;
     const w = 390;
@@ -612,9 +623,10 @@ export class TitleScreen {
     ctx.font = pixelFont(14);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    outlinedText(ctx, 'PRESS ENTER TO START', 0, 2, '#ffffff', '#7a1f4a', 5);
+    outlinedText(ctx, touch ? 'TAP TO START' : 'PRESS ENTER TO START', 0, 2, '#ffffff', '#7a1f4a', 5);
     ctx.restore();
 
+    if (touch) return;
     ctx.font = uiFont(12, 600);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.textAlign = 'center';

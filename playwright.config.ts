@@ -21,7 +21,14 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: 'touch.spec.ts',
       use: { ...devices['Desktop Chrome'], channel: process.env['PW_CHANNEL'] },
+    },
+    {
+      // A touch phone held sideways. Chromium only: the multi-touch test drives raw touches over CDP.
+      name: 'phone',
+      testMatch: 'touch.spec.ts',
+      use: { ...devices['Pixel 7 landscape'], channel: process.env['PW_CHANNEL'] },
     },
   ],
   webServer: {

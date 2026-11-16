@@ -47,6 +47,15 @@ Created by [www.kitsorfan.com](https://www.kitsorfan.com).
 | M | Mute all sound |
 | N | Toggle music |
 
+**On a phone or tablet**, hold it sideways and play with on-screen controls:
+
+- **Left thumb:** touch anywhere on the left half of the screen and drag to move. The stick appears under your thumb and follows it.
+- **Right thumb:** SHOVE in the corner, with SPRINT (hold), TWEET, SONAR and SOLAR fanned out around it. TWEET dims while it recharges, and SOLAR lights up once energy is low enough to use it.
+- **Pause** is the round button between the AI bubble meter and the minimap. The pause screen has the sound and music toggles. Tap anywhere to resume.
+- Tap Jensen's loan buttons to take or refuse a deal. Tap to start, to move on to the next series, and to play again.
+- On Android, the first tap also goes full screen. On iPhone, use Share > Add to Home Screen to play full screen.
+- The game pauses when you switch apps or turn the phone upright. Connect a keyboard and it switches back to keys.
+
 - **RAM sticks** count toward each series' target. Hit it before the **AI bubble** pops. Chain pickups for a combo multiplier (up to x8).
 - **GPUs** are worth 1,000 points each, but they add heat.
 - **Heat** rises constantly. Stand in **water** to cool down. Each oasis shrinks as you use it, dries up, and reappears somewhere else. At 100 heat you lose one of your 3 lives, and the board fires you: Sam stands there holding a cardboard box (plant included) for a moment, then gets rehired.
@@ -109,8 +118,8 @@ In dev mode only, the game is exposed as `window.game` for console tinkering (fo
 
 ### Testing
 
-- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input, player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote, loan and resignation visits, the alleged spy, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, solar panels, getting fired, HUD effects, and high-score storage validation.
-- **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab.
+- **Unit tests** (`src/**/*.test.ts`) cover the game rules: level tuning, input (keys, on-screen buttons and the touch stick), player movement and shoving, pickups, water, every rival strategy (stun, fury and revenge, Elon's dash, the swarm), Jensen's keynote, loan and resignation visits, the alleged spy, pooling people's idle RAM, breaking news and the headline ticker, distracted rivals, falling RAM, hype tweets, solar panels, getting fired, HUD effects, and high-score storage validation.
+- **End-to-end tests** (`e2e/`) build the game, serve it, and drive it in a real browser. They check that it loads without errors, makes no third-party requests, ships a strict CSP, starts, pauses, and survives frantic play, and that the credit link opens in a new tab. A second project replays the touch controls on an emulated phone held sideways: tap to start, two-thumb play over raw multi-touch, the pause button and sound toggles, the "turn your phone sideways" notice, and switching to a keyboard.
 
 The end-to-end tests use Playwright's Chromium. Install it once with `npx playwright install chromium`, or use a browser you already have, e.g. `PW_CHANNEL=msedge npm run test:e2e`.
 
@@ -118,10 +127,11 @@ The end-to-end tests use Playwright's Chromium. Install it once with `npx playwr
 
 ```text
 src/
-  main.ts            entry point: wires audio, input and the game together
+  main.ts            entry point: wires audio, input, touch controls and the game together
   game.ts            game loop, state machine, spawning, scoring, shoving, fog of war
   config.ts          every tuning number (speeds, heat/energy rates, level scaling)
-  input.ts           keyboard state
+  input.ts           keyboard state, plus what the touch controls feed in
+  touch.ts           on-screen controls for phones and tablets: stick, buttons, rotate notice, fullscreen
   math.ts            small vector/random helpers
   storage.ts         validated high-score persistence
   news.ts            breaking-news stories, the headline ticker, tweets and headlines

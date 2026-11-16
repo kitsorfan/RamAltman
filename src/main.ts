@@ -7,19 +7,23 @@ import { Music } from './audio/music';
 import { Sfx } from './audio/sfx';
 import { Game } from './game';
 import { Input } from './input';
+import { mountTouchControls } from './touch';
 
+const stage = document.querySelector<HTMLElement>('#stage');
 const canvas = document.querySelector<HTMLCanvasElement>('#game');
-if (!canvas) throw new Error('Canvas #game not found');
+if (!stage || !canvas) throw new Error('Game stage or canvas not found');
 
 // The canvas only sees fonts that are loaded, so request the pixel font up front.
 void document.fonts.load('16px "Press Start 2P"');
 
 const audio = new AudioEngine();
 const unlockAudio = (): void => audio.unlock();
-window.addEventListener('keydown', unlockAudio);
-window.addEventListener('pointerdown', unlockAudio);
+// Some mobile browsers only count a tap as a gesture once the finger lifts.
+for (const type of ['keydown', 'pointerdown', 'pointerup', 'touchend']) window.addEventListener(type, unlockAudio);
 
-const game = new Game(canvas, new Input(window), audio, new Sfx(audio), new Music(audio));
+const input = new Input(window);
+const game = new Game(canvas, input, audio, new Sfx(audio), new Music(audio));
+mountTouchControls(stage, canvas, input, () => game.pause());
 game.start();
 
 if (import.meta.env.DEV) {

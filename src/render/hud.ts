@@ -32,6 +32,8 @@ export interface HudData {
   /** Hype tweet recharge, 0 (just posted) to 1 (ready). */
   tweetReady: number;
   solar: SolarState;
+  /** On touch controls: no key names (the buttons are labeled). */
+  touch: boolean;
 }
 
 /** The solar panels: not needed yet, ready (energy is low), unfolding, or charging. */
@@ -130,6 +132,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, d: HudData): void {
   drawLeaderboard(ctx, d);
   drawCombo(ctx, d);
 
+  if (d.touch) return;
   ctx.font = uiFont(12, 600);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'alphabetic';
@@ -202,7 +205,8 @@ function barGlow(
 }
 
 interface Chip {
-  key: string;
+  /** The key that uses it (left off for touch players, whose buttons are labeled). */
+  key: string | null;
   label: string;
   /** How full the chip is, 0 to 1. */
   fill: number;
@@ -228,18 +232,20 @@ function drawChip(ctx: CanvasRenderingContext2D, y: number, c: Chip, time: numbe
   ctx.fillRect(x, y, w * clamp(c.fill, 0, 1), h);
   ctx.restore();
 
-  ctx.fillStyle = c.ready ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
-  ctx.beginPath();
-  ctx.roundRect(x + 6, y + 4, 14, 14, 3);
-  ctx.fill();
   ctx.font = pixelFont(7);
-  ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#2a0f3d';
-  ctx.fillText(c.key, x + 13, y + 12);
+  if (c.key) {
+    ctx.fillStyle = c.ready ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+    ctx.beginPath();
+    ctx.roundRect(x + 6, y + 4, 14, 14, 3);
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#2a0f3d';
+    ctx.fillText(c.key, x + 13, y + 12);
+  }
   ctx.textAlign = 'left';
   ctx.fillStyle = c.ready ? c.color : '#8d86ad';
-  ctx.fillText(c.label, x + 28, y + 12);
+  ctx.fillText(c.label, x + (c.key ? 28 : 10), y + 12);
 }
 
 /** Under the status panel: is the hype tweet ready yet? */
@@ -248,7 +254,7 @@ function drawTweetChip(ctx: CanvasRenderingContext2D, d: HudData): void {
   drawChip(
     ctx,
     PANEL_Y + 134,
-    { key: 'T', label: ready ? 'HYPE TWEET' : 'DRAFTING…', fill: d.tweetReady, ready, rgb: '79, 184, 255', color: '#bfeaff' },
+    { key: d.touch ? null : 'T', label: ready ? 'HYPE TWEET' : 'DRAFTING…', fill: d.tweetReady, ready, rgb: '79, 184, 255', color: '#bfeaff' },
     d.time,
   );
 }
@@ -267,7 +273,7 @@ function drawSolarChip(ctx: CanvasRenderingContext2D, d: HudData): void {
   drawChip(
     ctx,
     PANEL_Y + 162,
-    { key: 'R', label: SOLAR_LABELS[s], fill, ready: s !== 'locked', rgb: '255, 201, 60', color: '#ffe08a' },
+    { key: d.touch ? null : 'R', label: SOLAR_LABELS[s], fill, ready: s !== 'locked', rgb: '255, 201, 60', color: '#ffe08a' },
     d.time,
   );
 }
