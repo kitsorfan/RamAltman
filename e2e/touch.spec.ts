@@ -79,6 +79,9 @@ test('turning the phone upright pauses the game behind a "turn sideways" notice'
   const notice = page.getByText('Turn your phone sideways');
   await expect(notice).toBeHidden();
 
+  // The start tap went full screen, and headless Chromium won't resize a full-screen window
+  // (a real phone just turns), so leave full screen before "turning" it.
+  await page.evaluate(() => (document.fullscreenElement ? document.exitFullscreen() : undefined));
   await page.setViewportSize({ width: landscape.height, height: landscape.width });
   await expect(notice).toBeVisible();
   await expect(canvas(page)).toHaveAttribute('data-state', 'paused');
